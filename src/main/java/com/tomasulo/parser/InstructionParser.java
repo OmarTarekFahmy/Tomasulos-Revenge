@@ -2,7 +2,6 @@ package com.tomasulo.parser;
 
 import com.tomasulo.core.Instruction;
 import com.tomasulo.core.Instruction.Opcode;
-
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 

@@ -1,7 +1,6 @@
 package com.tomasulo.parser;
 
 import com.tomasulo.core.Instruction;
-
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
