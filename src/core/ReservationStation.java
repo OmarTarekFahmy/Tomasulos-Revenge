@@ -1,7 +1,5 @@
 package core;
 
-import java.lang.classfile.Opcode;
-
 public class ReservationStation {
 
     public enum State {
