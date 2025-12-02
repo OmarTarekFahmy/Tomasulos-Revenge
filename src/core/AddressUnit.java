@@ -1,7 +1,6 @@
 package core;
 
 import java.util.List;
-import java.util.Optional;
 
 public class AddressUnit {
 
@@ -39,7 +38,8 @@ public class AddressUnit {
     }
 
     public void tick() {
-        if (!busy) return;
+        if (!busy)
+            return;
         remainingCycles--;
         if (remainingCycles <= 0) {
             busy = false;
@@ -52,15 +52,16 @@ public class AddressUnit {
 
     /**
      * Check if a load can start memory access based on address clashes.
-     * "This load must wait for preceding stores with same address.":contentReference[oaicite:15]{index=15}
+     * "This load must wait for preceding stores with same
+     * address.":contentReference[oaicite:15]{index=15}
      */
     public static boolean canLoadGoToMemory(LoadBuffer load,
-                                            List<StoreBuffer> stores) {
+            List<StoreBuffer> stores) {
         for (StoreBuffer sb : stores) {
             if (!sb.isFree()
-                && sb.getSequenceNumber() < load.getSequenceNumber()
-                && sb.getEffectiveAddress() == load.getEffectiveAddress()
-                && sb.getState() != StoreBuffer.State.FREE) {
+                    && sb.getSequenceNumber() < load.getSequenceNumber()
+                    && sb.getEffectiveAddress() == load.getEffectiveAddress()
+                    && sb.getState() != StoreBuffer.State.FREE) {
                 return false;
             }
         }
@@ -71,20 +72,20 @@ public class AddressUnit {
      * Check store address clash with earlier loads/stores.
      */
     public static boolean canStoreGoToMemory(StoreBuffer store,
-                                             List<LoadBuffer> loads,
-                                             List<StoreBuffer> stores) {
+            List<LoadBuffer> loads,
+            List<StoreBuffer> stores) {
         for (StoreBuffer sb : stores) {
             if (!sb.isFree()
-                && sb.getSequenceNumber() < store.getSequenceNumber()
-                && sb.getEffectiveAddress() == store.getEffectiveAddress()
-                && sb != store) {
+                    && sb.getSequenceNumber() < store.getSequenceNumber()
+                    && sb.getEffectiveAddress() == store.getEffectiveAddress()
+                    && sb != store) {
                 return false;
             }
         }
         for (LoadBuffer lb : loads) {
             if (!lb.isFree()
-                && lb.getSequenceNumber() < store.getSequenceNumber()
-                && lb.getEffectiveAddress() == store.getEffectiveAddress()) {
+                    && lb.getSequenceNumber() < store.getSequenceNumber()
+                    && lb.getEffectiveAddress() == store.getEffectiveAddress()) {
                 return false;
             }
         }

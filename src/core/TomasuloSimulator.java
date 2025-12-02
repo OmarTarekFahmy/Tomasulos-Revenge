@@ -19,23 +19,21 @@ import java.util.List;
 public class TomasuloSimulator {
 
     // --- config ---
-    private static final int NUM_REGS = 64;      // 0..31 -> "R"; 32..63 -> "F"
-    private static final int FP_BASE = 32;       // F0 == reg[32], F6 == reg[38], etc.
+    private static final int NUM_REGS = 64; // 0..31 -> "R"; 32..63 -> "F"
+    private static final int FP_BASE = 32; // F0 == reg[32], F6 == reg[38], etc.
 
-    private static final int NUM_INT_ALU_UNITS     = 1;
-    private static final int NUM_INT_MULDIV_UNITS  = 1;
-    private static final int NUM_FP_ADD_SUB_UNITS  = 1;
-    private static final int NUM_FP_MUL_DIV_UNITS  = 1;
-
-
+    private static final int NUM_INT_ALU_UNITS = 1;
+    private static final int NUM_INT_MULDIV_UNITS = 1;
+    private static final int NUM_FP_ADD_SUB_UNITS = 1;
+    private static final int NUM_FP_MUL_DIV_UNITS = 1;
 
     private static final int NUM_FP_RS = 3;
     private static final int NUM_INT_RS = 3;
     private static final int NUM_LOAD_BUFFERS = 2;
     private static final int NUM_STORE_BUFFERS = 2;
 
-    private static final int LOAD_LATENCY = 2;   // cycles in memory
-    private static final int STORE_LATENCY = 2;  // cycles to commit store
+    private static final int LOAD_LATENCY = 2; // cycles in memory
+    private static final int STORE_LATENCY = 2; // cycles to commit store
 
     // --- core state ---
     private final InstructionQueue iq = new InstructionQueue();
@@ -57,7 +55,7 @@ public class TomasuloSimulator {
 
     private int cycle = 0;
     private long nextTagId = 1;
-    private long nextSeqNum = 0;  // you can use this later for load/store ordering
+    private long nextSeqNum = 0; // you can use this later for load/store ordering
 
     public TomasuloSimulator(List<Instruction> program) {
         this.program = program;
@@ -70,8 +68,13 @@ public class TomasuloSimulator {
     }
 
     // --- helper: mapping reg names ---
-    private static int r(int num) { return num; }              // integer reg
-    private static int f(int num) { return FP_BASE + num; }    // FP reg
+    private static int r(int num) {
+        return num;
+    } // integer reg
+
+    private static int f(int num) {
+        return FP_BASE + num;
+    } // FP reg
 
     // --- init microarchitectural structures ---
     private void initStructures() {
@@ -85,7 +88,7 @@ public class TomasuloSimulator {
         }
 
         // FUs
-                // FP FUs: separate ADD/SUB and MUL/DIV
+        // FP FUs: separate ADD/SUB and MUL/DIV
         for (int i = 0; i < NUM_FP_ADD_SUB_UNITS; i++) {
             fpUnits.add(new FunctionalUnit(FunctionalUnit.Type.FP_ADD_SUB));
         }
@@ -97,10 +100,6 @@ public class TomasuloSimulator {
         for (int i = 0; i < NUM_INT_ALU_UNITS; i++) {
             intUnits.add(new FunctionalUnit(FunctionalUnit.Type.INT_ALU));
         }
-        for (int i = 0; i < NUM_INT_MULDIV_UNITS; i++) {
-            intUnits.add(new FunctionalUnit(FunctionalUnit.Type.INT_MULDIV));
-        }
-
 
         // Load/Store buffers
         for (int i = 0; i < NUM_LOAD_BUFFERS; i++) {
@@ -120,9 +119,9 @@ public class TomasuloSimulator {
         registerFile.get(r(2)).setValue(100); // R2 = 100
 
         // Test 1 / 2 memory values at 0(R2) and 8(R2), 20(R2) etc.
-        memory.storeDouble(100, 1.0);   // 0(R2)
-        memory.storeDouble(108, 2.0);   // 8(R2)
-        memory.storeDouble(120, 3.0);   // 20(R2)
+        memory.storeDouble(100, 1.0); // 0(R2)
+        memory.storeDouble(108, 2.0); // 8(R2)
+        memory.storeDouble(120, 3.0); // 20(R2)
 
         // FP registers used in tests
         registerFile.get(f(1)).setValue(10.0);
@@ -297,7 +296,8 @@ public class TomasuloSimulator {
     // --- 4) Issue stage ---
 
     private void issueFromQueue() {
-        if (iq.isEmpty()) return;
+        if (iq.isEmpty())
+            return;
 
         Instruction instr = iq.peek();
         Opcode op = instr.getOpcode();
@@ -333,7 +333,7 @@ public class TomasuloSimulator {
             long seq = nextSeqNum();
             System.out.println("[ISSUE] " + op + " -> StoreBuffer " + sb.getTag() +
                     " (tag=" + tag + ", seq=" + seq + ")");
-            sb.issue(instr, registerFile, tag,seq);
+            sb.issue(instr, registerFile, tag, seq);
             int base = instr.getBaseReg();
             int offset = instr.getOffset();
             long ea = (long) registerFile.get(base).getIntValue() + offset;
@@ -342,7 +342,7 @@ public class TomasuloSimulator {
             return;
         }
 
-        if (instr.isFp()) {
+        if (instr.isFpAddSub() || instr.isFpMulDiv()) {
             ReservationStation rs = findFreeRs(fpStations);
             if (rs == null) {
                 System.out.println("[ISSUE] Stall: no free FP RS for " + op);
@@ -354,7 +354,7 @@ public class TomasuloSimulator {
             return;
         }
 
-        if (instr.isIntArithOrLogic()) {
+        if (instr.isIntArithmetic()) {
             ReservationStation rs = findFreeRs(intStations);
             if (rs == null) {
                 System.out.println("[ISSUE] Stall: no free INT RS for " + op);
@@ -367,29 +367,32 @@ public class TomasuloSimulator {
         }
 
         // Branches / jumps: not implemented yet
-        if (instr.isBranchOrJump()) {
-            System.out.println("[ISSUE] Branch/JUMP not implemented yet, skipping: " + op);
+        if (instr.isBranch()) {
+            System.out.println("[ISSUE] Branch not implemented yet, skipping: " + op);
             iq.dequeue();
         }
     }
 
     private LoadBuffer findFreeLoadBuffer() {
         for (LoadBuffer lb : loadBuffers) {
-            if (!lb.isBusy()) return lb;
+            if (!lb.isBusy())
+                return lb;
         }
         return null;
     }
 
     private StoreBuffer findFreeStoreBuffer() {
         for (StoreBuffer sb : storeBuffers) {
-            if (!sb.isBusy()) return sb;
+            if (!sb.isBusy())
+                return sb;
         }
         return null;
     }
 
     private ReservationStation findFreeRs(List<ReservationStation> list) {
         for (ReservationStation rs : list) {
-            if (rs.isFree()) return rs;
+            if (rs.isFree())
+                return rs;
         }
         return null;
     }
@@ -436,7 +439,8 @@ public class TomasuloSimulator {
 
     private String queueSizeWithHead() {
         Instruction head = iq.peek();
-        if (head == null) return "0";
+        if (head == null)
+            return "0";
         return iq.size() + " (head=" + head.getOpcode() + ")";
     }
 
@@ -491,7 +495,7 @@ public class TomasuloSimulator {
 
     public static void main(String[] args) {
         System.out.println("===== Running Test Program 1 =====");
-        TomasuloSimulator sim1 = new TomasuloSimulator(buildTestProgram1());
+        TomasuloSimulator sim1 = new TomasuloSimulator(parser.InstructionParser.parseFile("src/parser/test.txt"));
         sim1.run(25);
 
         // System.out.println("\n\n===== Running Test Program 2 =====");
