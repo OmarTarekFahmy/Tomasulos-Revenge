@@ -1,10 +1,10 @@
-package parser;
+package com.tomasulo.parser;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 
-import core.Instruction;
-import core.Instruction.Opcode;;
+import com.tomasulo.core.Instruction;
+import com.tomasulo.core.Instruction.Opcode;;
 
 public class InstructionParser {
 
@@ -238,7 +238,7 @@ public class InstructionParser {
 
     public static void main(String[] args) {
         InstructionParser parser = new InstructionParser();
-        ArrayList<Instruction> instructions = parser.parseFile("src/parser/test.txt");
+        ArrayList<Instruction> instructions = InstructionParser.parseFile("src/parser/test.txt");
 
         for (Instruction instr : instructions) {
             System.out.println("Opcode: " + instr.getOpcode() +

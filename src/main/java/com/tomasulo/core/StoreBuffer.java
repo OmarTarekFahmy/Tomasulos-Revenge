@@ -1,4 +1,4 @@
-package core;
+package com.tomasulo.core;
 
 public class StoreBuffer {
 
@@ -8,10 +8,10 @@ public class StoreBuffer {
         EXECUTING
     }
 
-    private final String name;      // e.g. "S1"
+    private final String name; // e.g. "S1"
     private final int memLatency;
 
-    private Tag tag;                // for completeness; not used on CDB
+    private Tag tag; // for completeness; not used on CDB
     private boolean busy;
     private long sequenceNumber;
 
@@ -41,28 +41,32 @@ public class StoreBuffer {
     public long getSequenceNumber() {
         return sequenceNumber;
     }
+
     public int getOffset() {
         return offset;
     }
+
     public int getBaseRegIndex() {
         return baseRegIndex;
     }
+
     public int getEffectiveAddress() {
         return (int) effectiveAddress;
     }
+
     public State getState() {
         return state;
     }
+
     public boolean isFree() {
         return !busy;
     }
 
-
     // ************ matches simulator call ************
     public void issue(Instruction instr,
-                      RegisterFile regFile,
-                      Tag producerTag,
-                      long seqNum) {
+            RegisterFile regFile,
+            Tag producerTag,
+            long seqNum) {
         this.tag = producerTag;
         this.sequenceNumber = seqNum;
         this.busy = true;
@@ -88,17 +92,17 @@ public class StoreBuffer {
         }
     }
 
-    
     /**
      * Called every cycle from the simulator.
      * When finished, the store actually writes to memory.
      */
     public void tick(IMemory memory) {
-        if (!busy || state != State.EXECUTING) return;
+        if (!busy || state != State.EXECUTING)
+            return;
 
         remainingCycles--;
         if (remainingCycles <= 0) {
-            memory.storeDouble(effectiveAddress, valueToStore);
+            memory.storeDouble((int) effectiveAddress, valueToStore);
             busy = false;
             state = State.FREE;
             baseRegIndex = -1;
@@ -119,7 +123,6 @@ public class StoreBuffer {
     public String debugString() {
         return String.format(
                 "%s(tag=%s, busy=%s, state=%s, EA=%d, src=R%d, seq=%d)",
-                name, tag, busy, state, effectiveAddress, srcRegIndex, sequenceNumber
-        );
+                name, tag, busy, state, effectiveAddress, srcRegIndex, sequenceNumber);
     }
 }

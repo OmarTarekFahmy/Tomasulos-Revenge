@@ -1,6 +1,6 @@
-package core;
+package com.tomasulo.core;
 
-import core.Instruction.Opcode;
+import com.tomasulo.core.Instruction.Opcode;
 
 public class FunctionalUnit {
 

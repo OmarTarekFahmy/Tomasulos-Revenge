@@ -1,4 +1,4 @@
-package parser;
+package com.tomasulo.parser;
 
 public class ProgramLoader {
 

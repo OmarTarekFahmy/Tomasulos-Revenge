@@ -1,6 +1,6 @@
-package core;
+package com.tomasulo.core;
 
-import core.Instruction.Opcode;
+import com.tomasulo.core.Instruction.Opcode;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,13 +34,14 @@ public class TomasuloSimulator {
 
     private static final int LOAD_LATENCY = 2; // cycles in memory
     private static final int STORE_LATENCY = 2; // cycles to commit store
+    private static final int MEMORY_SIZE = 65536; // 64KB memory
 
     // --- core state ---
     private final InstructionQueue iq = new InstructionQueue();
     private final List<Instruction> program;
 
     private final RegisterFile registerFile = new RegisterFile(NUM_REGS);
-    private final IMemory memory = new MainMemory();
+    private final IMemory memory = new MainMemory(MEMORY_SIZE);
 
     private final List<ReservationStation> fpStations = new ArrayList<>();
     private final List<ReservationStation> intStations = new ArrayList<>();
@@ -495,7 +496,8 @@ public class TomasuloSimulator {
 
     public static void main(String[] args) {
         System.out.println("===== Running Test Program 1 =====");
-        TomasuloSimulator sim1 = new TomasuloSimulator(parser.InstructionParser.parseFile("src/parser/test.txt"));
+        TomasuloSimulator sim1 = new TomasuloSimulator(
+                com.tomasulo.parser.InstructionParser.parseFile("src/main/resources/test.txt"));
         sim1.run(25);
 
         // System.out.println("\n\n===== Running Test Program 2 =====");

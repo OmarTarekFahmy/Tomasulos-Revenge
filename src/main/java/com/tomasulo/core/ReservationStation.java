@@ -1,4 +1,4 @@
-package core;
+package com.tomasulo.core;
 
 public class ReservationStation {
 

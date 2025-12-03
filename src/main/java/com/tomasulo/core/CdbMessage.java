@@ -1,4 +1,4 @@
-package core;
+package com.tomasulo.core;
 
 public class CdbMessage {
     private final Tag tag;

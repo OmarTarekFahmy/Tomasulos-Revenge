@@ -1,4 +1,4 @@
-package core;
+package com.tomasulo.core;
 
 public class LoadBuffer {
 
@@ -9,8 +9,8 @@ public class LoadBuffer {
         RESULT_READY
     }
 
-    private final String name;      // e.g. "L1" (for printing)
-    private final int memLatency;   // fixed latency for loads
+    private final String name; // e.g. "L1" (for printing)
+    private final int memLatency; // fixed latency for loads
 
     // Tomasulo tag (this is what goes into Qi and onto the CDB)
     private Tag tag;
@@ -29,15 +29,17 @@ public class LoadBuffer {
     public LoadBuffer(Tag initialTag, int memLatency) {
         this.name = initialTag.name(); // just for debug
         this.memLatency = memLatency;
-        this.tag = initialTag;        // will be overwritten on issue()
+        this.tag = initialTag; // will be overwritten on issue()
     }
 
     public boolean isBusy() {
         return busy;
     }
+
     public int getOffset() {
         return offset;
     }
+
     public int getBaseRegIndex() {
         return baseRegIndex;
     }
@@ -45,6 +47,7 @@ public class LoadBuffer {
     public int getEffectiveAddress() {
         return (int) effectiveAddress;
     }
+
     public State getState() {
         return state;
     }
@@ -63,9 +66,9 @@ public class LoadBuffer {
 
     // ************ THIS is the missing method ************
     public void issue(Instruction instr,
-                      RegisterFile regFile,
-                      Tag producerTag,
-                      long seqNum) {
+            RegisterFile regFile,
+            Tag producerTag,
+            long seqNum) {
         this.tag = producerTag;
         this.sequenceNumber = seqNum;
         this.busy = true;
@@ -94,7 +97,8 @@ public class LoadBuffer {
      * Called every cycle from the simulator.
      */
     public void tick(IMemory memory) {
-        if (!busy || state != State.EXECUTING) return;
+        if (!busy || state != State.EXECUTING)
+            return;
 
         remainingCycles--;
         if (remainingCycles <= 0) {
@@ -110,8 +114,9 @@ public class LoadBuffer {
      * Create the CDB message once the load has finished.
      */
     public CdbMessage produceCdbMessage(IMemory memory) {
-        if (!isCdbReady()) return null;
-        double value = memory.loadDouble(effectiveAddress);
+        if (!isCdbReady())
+            return null;
+        double value = memory.loadDouble((int) effectiveAddress);
         return new CdbMessage(tag, value, destRegIndex);
     }
 
@@ -137,7 +142,6 @@ public class LoadBuffer {
     public String debugString() {
         return String.format(
                 "%s(tag=%s, busy=%s, state=%s, EA=%d, dest=R%d, seq=%d)",
-                name, tag, busy, state, effectiveAddress, destRegIndex, sequenceNumber
-        );
+                name, tag, busy, state, effectiveAddress, destRegIndex, sequenceNumber);
     }
 }

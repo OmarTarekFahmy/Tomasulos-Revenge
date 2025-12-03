@@ -1,4 +1,4 @@
-package core;
+package com.tomasulo.core;
 
 public final class Tag {
     private final String name; // e.g. "A1", "M2", "L3", "S1"
