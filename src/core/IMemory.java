@@ -1,6 +1,13 @@
 package core;
 
 public interface IMemory {
-    double loadDouble(long address);
-    void storeDouble(long address, double value);
+    int loadWord(int address);
+    long loadLong(int address);
+    float loadFloat(int address);
+    double loadDouble(int address);
+
+    boolean storeWord(int address, int value);
+    boolean storeLong(int address, long value);
+    boolean storeFloat(int address, float value);
+    boolean storeDouble(int address, double value);
 }
