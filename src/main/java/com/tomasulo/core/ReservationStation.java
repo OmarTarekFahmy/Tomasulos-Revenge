@@ -4,13 +4,22 @@ public class ReservationStation {
 
     public enum State {
         FREE,
+        ISSUED,              // Just issued, will check operands next cycle
         WAITING_FOR_OPERANDS,
         WAITING_FOR_FU,
         EXECUTING,
-        RESULT_READY
+        EXECUTED             // Execution finished, waiting for CDB
+    }
+
+    // Type of RS - determines which FU pool it can use
+    public enum Type {
+        FP_ADD_SUB,
+        FP_MUL_DIV,
+        INT_ALU
     }
 
     private final Tag tag;        // e.g. A1, M2...
+    private final Type type;      // What kind of operations this RS handles
     private boolean busy;
     private State state = State.FREE;
 
@@ -24,12 +33,24 @@ public class ReservationStation {
 
     private int destRegIndex = -1; // -1 if no destination
 
-    public ReservationStation(Tag tag) {
+    public ReservationStation(Tag tag, Type type) {
         this.tag = tag;
+        this.type = type;
+    }
+
+    /**
+     * Constructor for backward compatibility (defaults to INT_ALU)
+     */
+    public ReservationStation(Tag tag) {
+        this(tag, Type.INT_ALU);
     }
 
     public Tag getTag() {
         return tag;
+    }
+
+    public Type getType() {
+        return type;
     }
 
     public boolean isFree() {
@@ -45,7 +66,7 @@ public class ReservationStation {
     }
 
     public boolean isResultReady() {
-        return busy && state == State.RESULT_READY;
+        return busy && state == State.EXECUTED;
     }
     public Instruction.Opcode getOpcode()     { return opcode; }
     public double getVj()         { return Vj; }
@@ -96,10 +117,18 @@ public class ReservationStation {
             regFile.get(destRegIndex).setQi(tag);
         }
 
-        // Initial state: waiting for operands;
-        // if they are already ready (no Q’s), we will move to WAITING_FOR_FU.
-        state = State.WAITING_FOR_OPERANDS;
-        updateReadyForFu();
+        // Initial state: ISSUED - will transition to WAITING_FOR_OPERANDS next cycle
+        state = State.ISSUED;
+    }
+
+    /**
+     * Called each cycle to advance state from ISSUED to WAITING_FOR_OPERANDS
+     */
+    public void tick() {
+        if (state == State.ISSUED) {
+            state = State.WAITING_FOR_OPERANDS;
+            updateReadyForFu();
+        }
     }
 
     /**
@@ -115,7 +144,7 @@ public class ReservationStation {
             Vk = value;
         }
 
-        if (state == State.WAITING_FOR_OPERANDS) {
+        if (state == State.WAITING_FOR_OPERANDS || state == State.ISSUED) {
             updateReadyForFu();
         }
     }
@@ -144,7 +173,7 @@ public class ReservationStation {
      */
     public void onExecutionFinished() {
         if (state == State.EXECUTING) {
-            state = State.RESULT_READY;
+            state = State.EXECUTED;
         }
     }
 
@@ -153,7 +182,7 @@ public class ReservationStation {
      * Called once when we decide this RS "wins" the CDB this cycle.
      */
     public CdbMessage buildCdbMessage(double result) {
-        if (state != State.RESULT_READY) {
+        if (state != State.EXECUTED) {
             return null;
         }
 
@@ -174,9 +203,23 @@ public class ReservationStation {
         Qk = Tag.NONE;
         // Vj/Vk can stay garbage
     }
+
     public String debugString() {
-        return String.format("RS %s [busy=%b, state=%s, op=%s, Vj=%.2f, Vk=%.2f, Qj=%s, Qk=%s, dest=%d]",
-                tag, busy, state, opcode, Vj, Vk, Qj, Qk, destRegIndex);
+        String destStr = formatRegister(destRegIndex);
+        return String.format("RS %s [busy=%b, state=%s, op=%s, Vj=%.2f, Vk=%.2f, Qj=%s, Qk=%s, dest=%s]",
+                tag, busy, state, opcode, Vj, Vk, Qj, Qk, destStr);
+    }
+
+    /**
+     * Format register index as R# or F# depending on whether it's INT or FP
+     */
+    private String formatRegister(int regIndex) {
+        if (regIndex < 0) return "none";
+        if (regIndex >= 32) {
+            return "F" + (regIndex - 32);
+        } else {
+            return "R" + regIndex;
+        }
     }
 
     public int getDestRegIndex() {

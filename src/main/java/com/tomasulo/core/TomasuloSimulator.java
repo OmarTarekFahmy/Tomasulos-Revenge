@@ -3,18 +3,14 @@ package com.tomasulo.core;
 import com.tomasulo.core.Instruction.Opcode;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
- * Very first end-to-end harness for Tomasulo:
- * - 1 FP functional unit (ADD_D/SUB_D/MUL_D/DIV_D)
- * - 1 INT ALU unit (DADD*, logical, etc.)
- * - A small pool of Reservation Stations for INT + FP
- * - Simple Load/Store handling via LoadBuffer / StoreBuffer
- *
- * This is NOT final microarchitectural behavior, but good enough
- * to start testing your RS + FU + CDB integration on the given test programs.
+ * Tomasulo Algorithm Simulator
+ * - Configurable number of FP and INT functional units
+ * - Configurable reservation stations, load/store buffers
+ * - Cache with configurable hit/miss latencies
+ * - User-defined latencies for each functional unit type
  */
 public class TomasuloSimulator {
 
@@ -22,29 +18,40 @@ public class TomasuloSimulator {
     private static final int NUM_REGS = 64; // 0..31 -> "R"; 32..63 -> "F"
     private static final int FP_BASE = 32; // F0 == reg[32], F6 == reg[38], etc.
 
-    private static final int NUM_INT_ALU_UNITS = 1;
-    private static final int NUM_INT_MULDIV_UNITS = 1;
-    private static final int NUM_FP_ADD_SUB_UNITS = 1;
-    private static final int NUM_FP_MUL_DIV_UNITS = 1;
+    // Configurable parameters (set via constructor)
+    private final int numIntAluUnits;
+    private final int numFpAddSubUnits;
+    private final int numFpMulDivUnits;
+    private final int numFpAddSubRs;   // Separate RS for FP ADD/SUB
+    private final int numFpMulDivRs;   // Separate RS for FP MUL/DIV
+    private final int numIntRs;
+    private final int numLoadBuffers;
+    private final int numStoreBuffers;
 
-    private static final int NUM_FP_RS = 3;
-    private static final int NUM_INT_RS = 3;
-    private static final int NUM_LOAD_BUFFERS = 2;
-    private static final int NUM_STORE_BUFFERS = 2;
+    // Latencies for functional units (set by user)
+    private final int intAluLatency;
+    private final int fpAddSubLatency;
+    private final int fpMulLatency;
+    private final int fpDivLatency;
 
-    private static final int LOAD_LATENCY = 2; // cycles in memory
-    private static final int STORE_LATENCY = 2; // cycles to commit store
-    private static final int MEMORY_SIZE = 65536; // 64KB memory
+    // Cache configuration
+    private final int cacheSize;
+    private final int blockSize;
+    private final int cacheHitLatency;
+    private final int cacheMissPenalty;
 
     // --- core state ---
     private final InstructionQueue iq = new InstructionQueue();
     private final List<Instruction> program;
 
     private final RegisterFile registerFile = new RegisterFile(NUM_REGS);
-    private final IMemory memory = new MainMemory(MEMORY_SIZE);
+    private final MainMemory mainMemory;
+    private final Cache cache;
 
-    private final List<ReservationStation> fpStations = new ArrayList<>();
-    private final List<ReservationStation> intStations = new ArrayList<>();
+    // Separate reservation station pools
+    private final List<ReservationStation> fpAddSubStations = new ArrayList<>();  // For ADD.D, SUB.D
+    private final List<ReservationStation> fpMulDivStations = new ArrayList<>();  // For MUL.D, DIV.D
+    private final List<ReservationStation> intStations = new ArrayList<>();       // For INT ALU ops
 
     private final List<FunctionalUnit> fpUnits = new ArrayList<>();
     private final List<FunctionalUnit> intUnits = new ArrayList<>();
@@ -56,16 +63,79 @@ public class TomasuloSimulator {
 
     private int cycle = 0;
     private long nextTagId = 1;
-    private long nextSeqNum = 0; // you can use this later for load/store ordering
+    private long nextSeqNum = 0; // for load/store ordering
 
-    public TomasuloSimulator(List<Instruction> program) {
+    /**
+     * Configuration class for simulator parameters
+     */
+    public static class Config {
+        public int numIntAluUnits = 1;
+        public int numFpAddSubUnits = 1;
+        public int numFpMulDivUnits = 1;
+        public int numFpAddSubRs = 3;    // RS for FP ADD/SUB
+        public int numFpMulDivRs = 3;    // RS for FP MUL/DIV
+        public int numIntRs = 3;
+        public int numLoadBuffers = 2;
+        public int numStoreBuffers = 2;
+        
+        // Functional unit latencies
+        public int intAluLatency = 1;
+        public int fpAddSubLatency = 3;
+        public int fpMulLatency = 5;
+        public int fpDivLatency = 12;
+        
+        // Cache configuration
+        public int cacheSize = 1024;      // bytes
+        public int blockSize = 64;         // bytes
+        public int cacheHitLatency = 1;    // cycles
+        public int cacheMissPenalty = 10;  // additional cycles on miss
+        
+        // Memory size
+        public int memorySize = 65536;     // 64KB
+    }
+
+    /**
+     * Constructor with full configuration
+     */
+    public TomasuloSimulator(List<Instruction> program, Config config) {
         this.program = program;
-        // load program into IQ
+        
+        // Store configuration
+        this.numIntAluUnits = config.numIntAluUnits;
+        this.numFpAddSubUnits = config.numFpAddSubUnits;
+        this.numFpMulDivUnits = config.numFpMulDivUnits;
+        this.numFpAddSubRs = config.numFpAddSubRs;
+        this.numFpMulDivRs = config.numFpMulDivRs;
+        this.numIntRs = config.numIntRs;
+        this.numLoadBuffers = config.numLoadBuffers;
+        this.numStoreBuffers = config.numStoreBuffers;
+        
+        this.intAluLatency = config.intAluLatency;
+        this.fpAddSubLatency = config.fpAddSubLatency;
+        this.fpMulLatency = config.fpMulLatency;
+        this.fpDivLatency = config.fpDivLatency;
+        
+        this.cacheSize = config.cacheSize;
+        this.blockSize = config.blockSize;
+        this.cacheHitLatency = config.cacheHitLatency;
+        this.cacheMissPenalty = config.cacheMissPenalty;
+        
+        // Initialize memory hierarchy
+        this.mainMemory = new MainMemory(config.memorySize);
+        this.cache = new Cache(cacheSize, blockSize, cacheHitLatency, cacheMissPenalty, mainMemory);
+        
+        // Load program into IQ
         for (Instruction instr : program) {
             iq.enqueue(instr);
         }
         initStructures();
-        initTestState(); // initial register/memory values to make tests meaningful
+    }
+
+    /**
+     * Constructor with default configuration (for backward compatibility)
+     */
+    public TomasuloSimulator(List<Instruction> program) {
+        this(program, new Config());
     }
 
     // --- helper: mapping reg names ---
@@ -79,56 +149,40 @@ public class TomasuloSimulator {
 
     // --- init microarchitectural structures ---
     private void initStructures() {
-        // FP RS
-        for (int i = 0; i < NUM_FP_RS; i++) {
-            fpStations.add(new ReservationStation(new Tag("FP" + (i + 1))));
+        // FP ADD/SUB Reservation Stations (A1, A2, A3...)
+        for (int i = 0; i < numFpAddSubRs; i++) {
+            fpAddSubStations.add(new ReservationStation(new Tag("A" + (i + 1)), ReservationStation.Type.FP_ADD_SUB));
+        }
+        // FP MUL/DIV Reservation Stations (M1, M2, M3...)
+        for (int i = 0; i < numFpMulDivRs; i++) {
+            fpMulDivStations.add(new ReservationStation(new Tag("M" + (i + 1)), ReservationStation.Type.FP_MUL_DIV));
         }
         // INT RS
-        for (int i = 0; i < NUM_INT_RS; i++) {
-            intStations.add(new ReservationStation(new Tag("I" + (i + 1))));
+        for (int i = 0; i < numIntRs; i++) {
+            intStations.add(new ReservationStation(new Tag("I" + (i + 1)), ReservationStation.Type.INT_ALU));
         }
 
-        // FUs
+        // FUs - pass latency configuration
         // FP FUs: separate ADD/SUB and MUL/DIV
-        for (int i = 0; i < NUM_FP_ADD_SUB_UNITS; i++) {
-            fpUnits.add(new FunctionalUnit(FunctionalUnit.Type.FP_ADD_SUB));
+        for (int i = 0; i < numFpAddSubUnits; i++) {
+            fpUnits.add(new FunctionalUnit(FunctionalUnit.Type.FP_ADD_SUB, fpAddSubLatency, fpAddSubLatency));
         }
-        for (int i = 0; i < NUM_FP_MUL_DIV_UNITS; i++) {
-            fpUnits.add(new FunctionalUnit(FunctionalUnit.Type.FP_MUL_DIV));
-        }
-
-        // INT FUs: ALU vs MUL/DIV
-        for (int i = 0; i < NUM_INT_ALU_UNITS; i++) {
-            intUnits.add(new FunctionalUnit(FunctionalUnit.Type.INT_ALU));
+        for (int i = 0; i < numFpMulDivUnits; i++) {
+            fpUnits.add(new FunctionalUnit(FunctionalUnit.Type.FP_MUL_DIV, fpMulLatency, fpDivLatency));
         }
 
-        // Load/Store buffers
-        for (int i = 0; i < NUM_LOAD_BUFFERS; i++) {
-            loadBuffers.add(new LoadBuffer(new Tag("L" + (i + 1)), LOAD_LATENCY));
+        // INT FUs
+        for (int i = 0; i < numIntAluUnits; i++) {
+            intUnits.add(new FunctionalUnit(FunctionalUnit.Type.INT_ALU, intAluLatency, intAluLatency));
         }
-        for (int i = 0; i < NUM_STORE_BUFFERS; i++) {
-            storeBuffers.add(new StoreBuffer(new Tag("S" + (i + 1)), STORE_LATENCY));
+
+        // Load/Store buffers - initial latency will be updated based on cache hit/miss
+        for (int i = 0; i < numLoadBuffers; i++) {
+            loadBuffers.add(new LoadBuffer(new Tag("L" + (i + 1)), cacheHitLatency));
         }
-    }
-
-    /**
-     * Initialize some register and memory values so the test programs
-     * actually compute interesting results instead of all zeros.
-     */
-    private void initTestState() {
-        // R2 base address
-        registerFile.get(r(2)).setValue(100); // R2 = 100
-
-        // Test 1 / 2 memory values at 0(R2) and 8(R2), 20(R2) etc.
-        memory.storeDouble(100, 1.0); // 0(R2)
-        memory.storeDouble(108, 2.0); // 8(R2)
-        memory.storeDouble(120, 3.0); // 20(R2)
-
-        // FP registers used in tests
-        registerFile.get(f(1)).setValue(10.0);
-        registerFile.get(f(2)).setValue(2.0);
-        registerFile.get(f(3)).setValue(3.0);
-        registerFile.get(f(4)).setValue(4.0);
+        for (int i = 0; i < numStoreBuffers; i++) {
+            storeBuffers.add(new StoreBuffer(new Tag("S" + (i + 1)), cache));
+        }
     }
 
     private Tag nextTag() {
@@ -145,6 +199,9 @@ public class TomasuloSimulator {
         while (cycle < maxCycles && (!iq.isEmpty() || anyBusy())) {
             cycle++;
             System.out.println("\n========== CYCLE " + cycle + " ==========");
+
+            // 0) Tick all RS to advance from ISSUED -> WAITING_FOR_OPERANDS
+            tickReservationStations();
 
             // 1) Execute FUs + memory and collect finished results
             List<CdbMessage> readyMessages = new ArrayList<>();
@@ -174,8 +231,25 @@ public class TomasuloSimulator {
         printFinalRegisters();
     }
 
+    /**
+     * Tick all reservation stations to advance their state machines
+     * (ISSUED -> WAITING_FOR_OPERANDS)
+     */
+    private void tickReservationStations() {
+        for (ReservationStation rs : fpAddSubStations) {
+            rs.tick();
+        }
+        for (ReservationStation rs : fpMulDivStations) {
+            rs.tick();
+        }
+        for (ReservationStation rs : intStations) {
+            rs.tick();
+        }
+    }
+
     private boolean anyBusy() {
-        return fpStations.stream().anyMatch(rs -> !rs.isFree())
+        return fpAddSubStations.stream().anyMatch(rs -> !rs.isFree())
+                || fpMulDivStations.stream().anyMatch(rs -> !rs.isFree())
                 || intStations.stream().anyMatch(rs -> !rs.isFree())
                 || loadBuffers.stream().anyMatch(LoadBuffer::isBusy)
                 || storeBuffers.stream().anyMatch(StoreBuffer::isBusy)
@@ -205,9 +279,9 @@ public class TomasuloSimulator {
     private void tickLoadsStores(List<CdbMessage> readyMessages) {
         // Loads: may produce a CDB message
         for (LoadBuffer lb : loadBuffers) {
-            lb.tick(memory);
+            lb.tick(cache);
             if (lb.isCdbReady()) {
-                CdbMessage msg = lb.produceCdbMessage(memory);
+                CdbMessage msg = lb.produceCdbMessage(cache);
                 if (msg != null) {
                     readyMessages.add(msg);
                 }
@@ -215,7 +289,7 @@ public class TomasuloSimulator {
         }
         // Stores: just advance memory commit
         for (StoreBuffer sb : storeBuffers) {
-            sb.tick(memory);
+            sb.tick(cache);
         }
     }
 
@@ -236,7 +310,8 @@ public class TomasuloSimulator {
     }
 
     private List<ReservationStation> allRs() {
-        List<ReservationStation> all = new ArrayList<>(fpStations);
+        List<ReservationStation> all = new ArrayList<>(fpAddSubStations);
+        all.addAll(fpMulDivStations);
         all.addAll(intStations);
         return all;
     }
@@ -261,13 +336,24 @@ public class TomasuloSimulator {
     // --- 3) Dispatch RS to FUs ---
 
     private void dispatchReadyRsToFus() {
-        // FP RS -> FP FUs
-        for (ReservationStation rs : fpStations) {
+        // FP ADD/SUB RS -> FP ADD/SUB FUs
+        for (ReservationStation rs : fpAddSubStations) {
             if (rs.isWaitingForFu()) {
                 FunctionalUnit fu = findFreeFuForOpcode(fpUnits, rs.getOpcode());
                 if (fu != null) {
                     System.out.println("[DISPATCH] RS " + rs.getTag() +
-                            " ( " + rs.getOpcode() + " ) -> FP FU");
+                            " ( " + rs.getOpcode() + " ) -> FP ADD/SUB FU");
+                    fu.start(rs);
+                }
+            }
+        }
+        // FP MUL/DIV RS -> FP MUL/DIV FUs
+        for (ReservationStation rs : fpMulDivStations) {
+            if (rs.isWaitingForFu()) {
+                FunctionalUnit fu = findFreeFuForOpcode(fpUnits, rs.getOpcode());
+                if (fu != null) {
+                    System.out.println("[DISPATCH] RS " + rs.getTag() +
+                            " ( " + rs.getOpcode() + " ) -> FP MUL/DIV FU");
                     fu.start(rs);
                 }
             }
@@ -312,13 +398,19 @@ public class TomasuloSimulator {
             }
             Tag tag = nextTag();
             long seq = nextSeqNum();
-            System.out.println("[ISSUE] " + op + " -> LoadBuffer " + lb.getTag() +
-                    " (tag=" + tag + ", seq=" + seq + ")");
-            lb.issue(instr, registerFile, tag, seq);
+            
             // compute EA directly for now (base + offset)
             int base = instr.getBaseReg();
             int offset = instr.getOffset();
             long ea = (long) registerFile.get(base).getIntValue() + offset;
+            
+            // Determine latency based on cache hit/miss
+            int accessLatency = cache.getAccessLatency((int) ea);
+            System.out.println("[ISSUE] " + op + " -> LoadBuffer " + lb.getTag() +
+                    " (tag=" + tag + ", seq=" + seq + ", latency=" + accessLatency + 
+                    (cache.isHit((int) ea) ? " HIT" : " MISS") + ")");
+            
+            lb.issue(instr, registerFile, tag, seq, accessLatency);
             lb.setEffectiveAddress(ea);
             iq.dequeue();
             return;
@@ -332,21 +424,39 @@ public class TomasuloSimulator {
             }
             Tag tag = nextTag();
             long seq = nextSeqNum();
-            System.out.println("[ISSUE] " + op + " -> StoreBuffer " + sb.getTag() +
-                    " (tag=" + tag + ", seq=" + seq + ")");
-            sb.issue(instr, registerFile, tag, seq);
+            
+            // compute EA directly for now (base + offset)
             int base = instr.getBaseReg();
             int offset = instr.getOffset();
             long ea = (long) registerFile.get(base).getIntValue() + offset;
+            
+            // Note: Cache hit/miss latency will be determined when execution starts
+            // (when the value to store is ready)
+            System.out.println("[ISSUE] " + op + " -> StoreBuffer " + sb.getTag() +
+                    " (tag=" + tag + ", seq=" + seq + ")");
+            
+            sb.issue(instr, registerFile, tag, seq);
             sb.setEffectiveAddress(ea);
             iq.dequeue();
             return;
         }
 
-        if (instr.isFpAddSub() || instr.isFpMulDiv()) {
-            ReservationStation rs = findFreeRs(fpStations);
+        if (instr.isFpAddSub()) {
+            ReservationStation rs = findFreeRs(fpAddSubStations);
             if (rs == null) {
-                System.out.println("[ISSUE] Stall: no free FP RS for " + op);
+                System.out.println("[ISSUE] Stall: no free FP ADD/SUB RS for " + op);
+                return;
+            }
+            System.out.println("[ISSUE] " + op + " -> RS " + rs.getTag());
+            rs.issue(instr, registerFile);
+            iq.dequeue();
+            return;
+        }
+
+        if (instr.isFpMulDiv()) {
+            ReservationStation rs = findFreeRs(fpMulDivStations);
+            if (rs == null) {
+                System.out.println("[ISSUE] Stall: no free FP MUL/DIV RS for " + op);
                 return;
             }
             System.out.println("[ISSUE] " + op + " -> RS " + rs.getTag());
@@ -403,8 +513,32 @@ public class TomasuloSimulator {
     private void printState() {
         System.out.println("\n[STATE] Instruction Queue size = " + queueSizeWithHead());
 
-        System.out.println("[STATE] FP Reservation Stations:");
-        for (ReservationStation rs : fpStations) {
+        System.out.println("[STATE] FP ADD/SUB Functional Units:");
+        for (FunctionalUnit fu : fpUnits) {
+            if (fu.getType() == FunctionalUnit.Type.FP_ADD_SUB) {
+                System.out.println("  " + fu.debugString());
+            }
+        }
+
+        System.out.println("[STATE] FP MUL/DIV Functional Units:");
+        for (FunctionalUnit fu : fpUnits) {
+            if (fu.getType() == FunctionalUnit.Type.FP_MUL_DIV) {
+                System.out.println("  " + fu.debugString());
+            }
+        }
+
+        System.out.println("[STATE] INT ALU Functional Units:");
+        for (FunctionalUnit fu : intUnits) {
+            System.out.println("  " + fu.debugString());
+        }
+
+        System.out.println("[STATE] FP ADD/SUB Reservation Stations:");
+        for (ReservationStation rs : fpAddSubStations) {
+            System.out.println("  " + rs.debugString());
+        }
+
+        System.out.println("[STATE] FP MUL/DIV Reservation Stations:");
+        for (ReservationStation rs : fpMulDivStations) {
             System.out.println("  " + rs.debugString());
         }
 
@@ -448,60 +582,125 @@ public class TomasuloSimulator {
     private void printFinalRegisters() {
         System.out.println("\n=== FINAL REGISTER STATE ===");
         printState();
+        
+        // Print cache statistics
+        System.out.println("\n=== CACHE STATISTICS ===");
+        cache.printStats();
     }
 
-    // --- Test program builders for the given examples ---
+    // --- Public accessors for GUI/external use ---
 
-    public static List<Instruction> buildTestProgram1() {
-        List<Instruction> p = new ArrayList<>();
-        // L.D F6, 0(R2)
-        p.add(new Instruction(Opcode.L_D, f(6), -1, -1, r(2), 0, 0));
-        // L.D F2, 8(R2)
-        p.add(new Instruction(Opcode.L_D, f(2), -1, -1, r(2), 8, 0));
-        // MUL.D F0, F2, F4
-        p.add(new Instruction(Opcode.MUL_D, f(0), f(2), f(4), -1, 0, 0));
-        // SUB.D F8, F2, F6
-        p.add(new Instruction(Opcode.SUB_D, f(8), f(2), f(6), -1, 0, 0));
-        // DIV.D F10, F0, F6
-        p.add(new Instruction(Opcode.DIV_D, f(10), f(0), f(6), -1, 0, 0));
-        // ADD.D F6, F8, F2
-        p.add(new Instruction(Opcode.ADD_D, f(6), f(8), f(2), -1, 0, 0));
-        // S.D F6, 8(R2)
-        p.add(new Instruction(Opcode.SD, -1, f(6), -1, r(2), 8, 0));
-        return p;
+    public RegisterFile getRegisterFile() {
+        return registerFile;
     }
 
-    public static List<Instruction> buildTestProgram2() {
-        List<Instruction> p = new ArrayList<>();
-        // L.D F6, 0(R2)
-        p.add(new Instruction(Opcode.L_D, f(6), -1, -1, r(2), 0, 0));
-        // ADD.D F7, F1, F3
-        p.add(new Instruction(Opcode.ADD_D, f(7), f(1), f(3), -1, 0, 0));
-        // L.D F2, 20(R2)
-        p.add(new Instruction(Opcode.L_D, f(2), -1, -1, r(2), 20, 0));
-        // MUL.D F0, F2, F4
-        p.add(new Instruction(Opcode.MUL_D, f(0), f(2), f(4), -1, 0, 0));
-        // SUB.D F8, F2, F6
-        p.add(new Instruction(Opcode.SUB_D, f(8), f(2), f(6), -1, 0, 0));
-        // DIV.D F10, F0, F6
-        p.add(new Instruction(Opcode.DIV_D, f(10), f(0), f(6), -1, 0, 0));
-        // S.D F10, 0(R2)
-        p.add(new Instruction(Opcode.SD, -1, f(10), -1, r(2), 0, 0));
-        return p;
+    public Cache getCache() {
+        return cache;
     }
 
-    // Loop test (Test 3) is not wired yet because branches are not implemented.
+    public MainMemory getMainMemory() {
+        return mainMemory;
+    }
 
-    // --- quick main() to run Test 1 and Test 2 ---
+    public int getCycle() {
+        return cycle;
+    }
+
+    public List<ReservationStation> getFpAddSubStations() {
+        return fpAddSubStations;
+    }
+
+    public List<ReservationStation> getFpMulDivStations() {
+        return fpMulDivStations;
+    }
+
+    public List<ReservationStation> getIntStations() {
+        return intStations;
+    }
+
+    public List<LoadBuffer> getLoadBuffers() {
+        return loadBuffers;
+    }
+
+    public List<StoreBuffer> getStoreBuffers() {
+        return storeBuffers;
+    }
+
+    /**
+     * Set a register value (for initialization)
+     */
+    public void setRegister(int regIndex, double value) {
+        registerFile.get(regIndex).setValue(value);
+    }
+
+    /**
+     * Set an integer register value
+     */
+    public void setIntRegister(int regNum, int value) {
+        registerFile.get(r(regNum)).setValue(value);
+    }
+
+    /**
+     * Set a floating-point register value
+     */
+    public void setFpRegister(int regNum, double value) {
+        registerFile.get(f(regNum)).setValue(value);
+    }
+
+    /**
+     * Store a double value in memory (bypassing cache for initialization)
+     */
+    public void setMemoryDouble(int address, double value) {
+        mainMemory.storeDouble(address, value);
+    }
+
+    /**
+     * Store a word value in memory (bypassing cache for initialization)
+     */
+    public void setMemoryWord(int address, int value) {
+        mainMemory.storeWord(address, value);
+    }
+
+    // --- Main entry point for testing ---
 
     public static void main(String[] args) {
-        System.out.println("===== Running Test Program 1 =====");
-        TomasuloSimulator sim1 = new TomasuloSimulator(
-                com.tomasulo.parser.InstructionParser.parseFile("src/main/resources/test.txt"));
-        sim1.run(25);
-
-        // System.out.println("\n\n===== Running Test Program 2 =====");
-        // TomasuloSimulator sim2 = new TomasuloSimulator(buildTestProgram2());
-        // sim2.run(50);
+        // Create configuration
+        Config config = new Config();
+        config.numFpAddSubRs = 3;
+        config.numFpMulDivRs = 3;
+        config.numIntRs = 3;
+        config.numLoadBuffers = 2;
+        config.numStoreBuffers = 2;
+        config.numFpAddSubUnits = 1;
+        config.numFpMulDivUnits = 1;
+        config.numIntAluUnits = 1;
+        
+        // Set latencies
+        config.intAluLatency = 1;
+        config.fpAddSubLatency = 3;
+        config.fpMulLatency = 5;
+        config.fpDivLatency = 12;
+        
+        // Cache configuration
+        config.cacheSize = 1024;
+        config.blockSize = 64;
+        config.cacheHitLatency = 1;
+        config.cacheMissPenalty = 10;
+        
+        System.out.println("===== Running Tomasulo Simulator =====");
+        List<Instruction> program = com.tomasulo.parser.InstructionParser.parseFile("src/main/resources/test.txt");
+        TomasuloSimulator sim = new TomasuloSimulator(program, config);
+        
+        // Initialize registers and memory for testing
+        sim.setIntRegister(2, 100);  // R2 = 100 (base address)
+        sim.setMemoryDouble(100, 1.0);  // 0(R2)
+        sim.setMemoryDouble(108, 2.0);  // 8(R2)
+        sim.setMemoryDouble(120, 3.0);  // 20(R2)
+        sim.setFpRegister(1, 10.0);
+        sim.setFpRegister(2, 2.0);
+        sim.setFpRegister(3, 3.0);
+        sim.setFpRegister(4, 4.0);
+        
+        sim.run(50);
     }
 }

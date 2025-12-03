@@ -188,12 +188,15 @@ public class InstructionParser {
     }
 
     // Parse register name like "R1", "F2" to integer index
+    // FP registers are offset by 32 (F0 = 32, F1 = 33, etc.)
+    private static final int FP_BASE = 32;
+    
     private static int parseRegister(String reg) {
         reg = reg.trim().toUpperCase();
         if (reg.startsWith("R")) {
             return Integer.parseInt(reg.substring(1));
         } else if (reg.startsWith("F")) {
-            return /* TODO: Configurable offset for FP registers */ Integer.parseInt(reg.substring(1));
+            return FP_BASE + Integer.parseInt(reg.substring(1));
         }
         throw new IllegalArgumentException("Invalid register: " + reg);
     }

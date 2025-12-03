@@ -25,6 +25,7 @@ public class LoadBuffer {
     private long effectiveAddress = 0;
     private int remainingCycles = 0;
     private State state = State.FREE;
+    private boolean executionStarted = false;  // Track if execution has started
 
     public LoadBuffer(Tag initialTag, int memLatency) {
         this.name = initialTag.name(); // just for debug
@@ -64,11 +65,29 @@ public class LoadBuffer {
         return sequenceNumber;
     }
 
-    // ************ THIS is the missing method ************
+    /**
+     * Issue with default latency (from constructor)
+     */
     public void issue(Instruction instr,
             RegisterFile regFile,
             Tag producerTag,
             long seqNum) {
+        issue(instr, regFile, producerTag, seqNum, memLatency);
+    }
+
+    /**
+     * Issue with specific access latency (based on cache hit/miss)
+     * @param instr The load instruction
+     * @param regFile The register file
+     * @param producerTag Tag for this load operation
+     * @param seqNum Sequence number for ordering
+     * @param accessLatency Latency in cycles (cache hit or miss penalty)
+     */
+    public void issue(Instruction instr,
+            RegisterFile regFile,
+            Tag producerTag,
+            long seqNum,
+            int accessLatency) {
         this.tag = producerTag;
         this.sequenceNumber = seqNum;
         this.busy = true;
@@ -78,7 +97,7 @@ public class LoadBuffer {
         this.offset = instr.getOffset();
 
         this.state = State.WAITING_FOR_ADDRESS;
-        this.remainingCycles = memLatency;
+        this.remainingCycles = accessLatency;  // Use provided latency
 
         // Mark RF: Qi(dest) = our tag
         if (destRegIndex >= 0) {
@@ -95,10 +114,17 @@ public class LoadBuffer {
 
     /**
      * Called every cycle from the simulator.
+     * Execution starts the cycle AFTER setEffectiveAddress is called.
      */
     public void tick(IMemory memory) {
         if (!busy || state != State.EXECUTING)
             return;
+
+        // First tick after entering EXECUTING state just marks execution started
+        if (!executionStarted) {
+            executionStarted = true;
+            return;  // Don't decrement on the first cycle (issue cycle)
+        }
 
         remainingCycles--;
         if (remainingCycles <= 0) {
@@ -137,11 +163,25 @@ public class LoadBuffer {
         offset = 0;
         effectiveAddress = 0;
         remainingCycles = 0;
+        executionStarted = false;
     }
 
     public String debugString() {
+        String destStr = formatRegister(destRegIndex);
         return String.format(
-                "%s(tag=%s, busy=%s, state=%s, EA=%d, dest=R%d, seq=%d)",
-                name, tag, busy, state, effectiveAddress, destRegIndex, sequenceNumber);
+                "%s(tag=%s, busy=%s, state=%s, EA=%d, dest=%s, remaining=%d, seq=%d)",
+                name, tag, busy, state, effectiveAddress, destStr, remainingCycles, sequenceNumber);
+    }
+
+    /**
+     * Format register index as R# or F# depending on whether it's INT or FP
+     */
+    private String formatRegister(int regIndex) {
+        if (regIndex < 0) return "none";
+        if (regIndex >= 32) {
+            return "F" + (regIndex - 32);
+        } else {
+            return "R" + regIndex;
+        }
     }
 }
