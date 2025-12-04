@@ -48,6 +48,11 @@ public class StoreBuffer {
         return busy;
     }
 
+    @Override
+    public String toString() {
+        return name;
+    }
+
 
     public Tag getTag() {
         return tag;
@@ -103,7 +108,7 @@ public class StoreBuffer {
         if (srcRegIndex >= 0) {
             Register srcReg = regFile.get(srcRegIndex);
             Tag srcProducer = srcReg.getQi();
-            if (srcProducer != null) {
+            if (srcProducer != null && !Tag.NONE.equals(srcProducer)) {
                 // Source value not ready, wait for CDB
                 this.sourceTag = srcProducer;
                 this.valueReady = false;

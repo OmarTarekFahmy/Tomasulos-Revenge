@@ -64,7 +64,22 @@ public class SimulationController {
     }
 
     public void initSimulator(List<Instruction> instructions) {
+        com.tomasulo.core.RegisterFile oldRegs = null;
+        if (simulator != null) {
+            oldRegs = simulator.getRegisterFile();
+        }
+
         simulator = new TomasuloSimulator(instructions, config);
+
+        if (oldRegs != null) {
+            // Preserve register values
+            for (int i = 0; i < oldRegs.size(); i++) {
+                simulator.getRegisterFile().get(i).setValue(oldRegs.get(i).getValue());
+                // Note: We don't preserve Qi because a new program implies a fresh start for dependencies
+            }
+            view.log("Preserved register values from previous session.");
+        }
+
         view.updateView();
         view.log("Program loaded. " + instructions.size() + " instructions.");
     }
@@ -198,6 +213,7 @@ public class SimulationController {
                 try {
                     int val = Integer.parseInt(valueStr);
                     simulator.getRegisterFile().get(regIdx).setValue(val);
+                    simulator.getRegisterFile().get(regIdx).setQi(com.tomasulo.core.Tag.NONE);
                 } catch (NumberFormatException e) {
                     view.log("Error: Integer register " + regName + " requires an integer value. Got: " + valueStr);
                 }
@@ -212,6 +228,7 @@ public class SimulationController {
                     double val = Double.parseDouble(valueStr);
                     // F0 is index 32 in the simulator's flat register file
                     simulator.getRegisterFile().get(regIdx + 32).setValue(val);
+                    simulator.getRegisterFile().get(regIdx + 32).setQi(com.tomasulo.core.Tag.NONE);
                 } catch (NumberFormatException e) {
                      view.log("Error: Invalid number format for " + regName + ": " + valueStr);
                 }
@@ -220,6 +237,29 @@ public class SimulationController {
             }
         } catch (Exception e) {
             view.log("Error parsing line: " + line);
+        }
+    }
+
+    public void setCacheValue(String addressStr, String valueStr) {
+        if (simulator == null) {
+            view.log("Simulator not initialized. Load a program first.");
+            return;
+        }
+
+        try {
+            int address = Integer.parseInt(addressStr);
+            double value = Double.parseDouble(valueStr);
+
+            // We use storeDouble to write to memory/cache
+            // This will handle cache hit/miss logic and update the cache block
+            simulator.getCache().storeDouble(address, value);
+            
+            view.updateView();
+            view.log("Set memory[" + address + "] = " + value);
+        } catch (NumberFormatException e) {
+            view.log("Invalid format. Address must be integer, Value must be number.");
+        } catch (Exception e) {
+            view.log("Error setting cache value: " + e.getMessage());
         }
     }
 }

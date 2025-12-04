@@ -157,7 +157,23 @@ public class SimulationView extends BorderPane {
         loadRegBtn.setMaxWidth(Double.MAX_VALUE);
         loadRegBtn.setOnAction(e -> controller.loadRegisterFile());
 
-        rightPane.getChildren().addAll(new Label("Register File"), registerTable, createSetRegisterButton(), loadRegBtn, new Label("Cache Content"), cacheTable);
+        Button setCacheBtn = new Button("Set Cache Value");
+        setCacheBtn.setMaxWidth(Double.MAX_VALUE);
+        setCacheBtn.setOnAction(e -> {
+            TextInputDialog dialog = new TextInputDialog("0 10.5");
+            dialog.setTitle("Set Cache Value");
+            dialog.setHeaderText("Enter Address and Value (e.g., 100 50.5)");
+            dialog.showAndWait().ifPresent(result -> {
+                String[] parts = result.trim().split("\\s+");
+                if (parts.length == 2) {
+                    controller.setCacheValue(parts[0], parts[1]);
+                } else {
+                    log("Invalid format. Use: ADDRESS VALUE");
+                }
+            });
+        });
+
+        rightPane.getChildren().addAll(new Label("Register File"), registerTable, createSetRegisterButton(), loadRegBtn, new Label("Cache Content"), cacheTable, setCacheBtn);
         setRight(rightPane);
 
 
@@ -282,7 +298,7 @@ public class SimulationView extends BorderPane {
         table.maxHeightProperty().bind(table.prefHeightProperty());
 
         TableColumn<LoadBuffer, String> tagCol = new TableColumn<>("Tag");
-        tagCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getTag().toString()));
+        tagCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().toString()));
         
         TableColumn<LoadBuffer, String> busyCol = new TableColumn<>("Busy");
         busyCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().isBusy())));
@@ -302,7 +318,7 @@ public class SimulationView extends BorderPane {
         table.maxHeightProperty().bind(table.prefHeightProperty());
 
         TableColumn<StoreBuffer, String> tagCol = new TableColumn<>("Tag");
-        tagCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getTag().toString()));
+        tagCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().toString()));
         
         TableColumn<StoreBuffer, String> busyCol = new TableColumn<>("Busy");
         busyCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().isBusy())));

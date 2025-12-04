@@ -94,7 +94,7 @@ public class ReservationStation {
         int s1 = instr.getSrc1Reg();
         if (s1 >= 0) {
             Register r1 = regFile.get(s1);
-            if (r1.getQi() == Tag.NONE) {
+            if (Tag.NONE.equals(r1.getQi())) {
                 Vj = r1.getValue();
                 Qj = Tag.NONE;
             } else {
@@ -108,7 +108,7 @@ public class ReservationStation {
         if (instr.usesSecondSource()) {
             int s2 = instr.getSrc2Reg();
             Register r2 = regFile.get(s2);
-            if (r2.getQi() == Tag.NONE) {
+            if (Tag.NONE.equals(r2.getQi())) {
                 Vk = r2.getValue();
                 Qk = Tag.NONE;
             } else {
@@ -160,7 +160,7 @@ public class ReservationStation {
      * Internal helper: check if both operands are ready and move to WAITING_FOR_FU.
      */
     private void updateReadyForFu() {
-        if (Qj == Tag.NONE && Qk == Tag.NONE && state == State.WAITING_FOR_OPERANDS) {
+        if (Tag.NONE.equals(Qj) && Tag.NONE.equals(Qk) && state == State.WAITING_FOR_OPERANDS) {
             state = State.WAITING_FOR_FU;
         }
     }

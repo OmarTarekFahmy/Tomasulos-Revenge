@@ -63,6 +63,11 @@ public class LoadBuffer {
         return tag;
     }
 
+    @Override
+    public String toString() {
+        return name;
+    }
+
     public long getSequenceNumber() {
 
 
