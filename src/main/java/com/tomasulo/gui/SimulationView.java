@@ -61,6 +61,7 @@ public class SimulationView extends BorderPane {
         loadBtn.setOnAction(e -> controller.loadProgramFile());
 
         Button loadTextBtn = new Button("Load from Text Area");
+        loadTextBtn.setMaxWidth(Double.MAX_VALUE);
         loadTextBtn.setOnAction(e -> controller.loadProgramText(programInput.getText()));
 
         Button stepBtn = new Button("Step");
@@ -72,7 +73,7 @@ public class SimulationView extends BorderPane {
         cycleLabel = new Label("Cycle: 0");
         cycleLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
 
-        topBar.getChildren().addAll(loadBtn, loadTextBtn, stepBtn, runBtn, cycleLabel);
+        topBar.getChildren().addAll(loadBtn, stepBtn, runBtn, cycleLabel);
         setTop(topBar);
 
         // Left Side: Program Input & Instruction Queue
@@ -92,7 +93,7 @@ public class SimulationView extends BorderPane {
         instructionQueueTable.getColumns().addAll(iqOpCol, iqDestCol);
         instructionQueueTable.setPlaceholder(new Label("Instruction Queue Empty"));
 
-        leftPane.getChildren().addAll(new Label("Program Input:"), programInput, new Label("Instruction Queue:"), instructionQueueTable);
+        leftPane.getChildren().addAll(new Label("Program Input:"), programInput, loadTextBtn, new Label("Instruction Queue:"), instructionQueueTable);
         setLeft(leftPane);
 
         // Center: Reservation Stations & Buffers
@@ -250,10 +251,19 @@ public class SimulationView extends BorderPane {
         cycleLabel.setText("Cycle: " + simulator.getCycle());
 
         fpAddTable.setItems(FXCollections.observableArrayList(simulator.getFpAddSubStations()));
+        fpAddTable.refresh();
+
         fpMulTable.setItems(FXCollections.observableArrayList(simulator.getFpMulDivStations()));
+        fpMulTable.refresh();
+
         intTable.setItems(FXCollections.observableArrayList(simulator.getIntStations()));
+        intTable.refresh();
+
         loadTable.setItems(FXCollections.observableArrayList(simulator.getLoadBuffers()));
+        loadTable.refresh();
+
         storeTable.setItems(FXCollections.observableArrayList(simulator.getStoreBuffers()));
+        storeTable.refresh();
         
         // Registers
         List<RegisterWrapper> regWrappers = new ArrayList<>();
@@ -265,6 +275,7 @@ public class SimulationView extends BorderPane {
             regWrappers.add(new RegisterWrapper("F" + i, rf.get(i + 32)));
         }
         registerTable.setItems(FXCollections.observableArrayList(regWrappers));
+        registerTable.refresh();
 
         // Cache
         List<CacheBlock> validBlocks = new ArrayList<>();
@@ -274,9 +285,11 @@ public class SimulationView extends BorderPane {
             }
         }
         cacheTable.setItems(FXCollections.observableArrayList(validBlocks));
+        cacheTable.refresh();
         
         // Instruction Queue
         instructionQueueTable.setItems(FXCollections.observableArrayList(simulator.getInstructionQueue().toList()));
+        instructionQueueTable.refresh();
     }
 
     public void log(String msg) {

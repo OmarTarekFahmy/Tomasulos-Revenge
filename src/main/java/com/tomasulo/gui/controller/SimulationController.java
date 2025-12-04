@@ -74,9 +74,11 @@ public class SimulationController {
         if (!simulator.isFinished()) {
             simulator.step();
             view.updateView();
-            view.log("Cycle " + simulator.getCycle() + " executed.");
-            String cdb = simulator.getCdbStatus();
-            if (!cdb.isEmpty()) view.log("[CDB] " + cdb);
+            
+            // Append all logs from this cycle
+            for (String logMsg : simulator.getCycleLog()) {
+                view.log(logMsg);
+            }
         } else {
             view.log("Simulation Finished.");
         }
@@ -87,6 +89,10 @@ public class SimulationController {
         // TODO: Run in a background thread to avoid freezing UI for long simulations
         while (!simulator.isFinished()) {
             simulator.step();
+            // Append all logs from this cycle
+            for (String logMsg : simulator.getCycleLog()) {
+                view.log(logMsg);
+            }
         }
         view.updateView();
         view.log("Run complete. Total Cycles: " + simulator.getCycle());

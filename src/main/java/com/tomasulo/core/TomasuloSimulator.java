@@ -65,6 +65,17 @@ public class TomasuloSimulator {
     private long nextTagId = 1;
     private long nextSeqNum = 0; // for load/store ordering
 
+    private final List<String> cycleLog = new ArrayList<>();
+
+    public List<String> getCycleLog() {
+        return new ArrayList<>(cycleLog);
+    }
+
+    private void log(String msg) {
+        cycleLog.add(msg);
+        System.out.println(msg);
+    }
+
     /**
      * Configuration class for simulator parameters
      */
@@ -210,7 +221,8 @@ public class TomasuloSimulator {
 
     public void step() {
         cycle++;
-        System.out.println("\n========== CYCLE " + cycle + " ==========");
+        cycleLog.clear();
+        log("\n========== CYCLE " + cycle + " ==========");
 
         // 0) Tick all RS to advance from ISSUED -> WAITING_FOR_OPERANDS
         tickReservationStations();
@@ -223,7 +235,7 @@ public class TomasuloSimulator {
         // 2) Broadcast at most one result on CDB (simple policy)
         if (!readyMessages.isEmpty()) {
             CdbMessage chosen = chooseMessageForCdb(readyMessages);
-            System.out.println("[CDB] Broadcasting " + chosen);
+            log("[CDB] Broadcasting " + chosen);
             broadcastOnCdb(chosen);
             // free the producer structures
             handleProducerFree(chosen.tag());
@@ -235,8 +247,31 @@ public class TomasuloSimulator {
         // 4) Issue from IQ
         issueFromQueue();
 
-        // 5) Debug prints
+        // 5) Log currently computing instructions
+        logComputingInstructions();
+
+        // 6) Debug prints
         printState();
+    }
+
+    private void logComputingInstructions() {
+        List<String> computing = new ArrayList<>();
+        for (FunctionalUnit fu : fpUnits) {
+            if (!fu.isFree()) computing.add(fu.debugString());
+        }
+        for (FunctionalUnit fu : intUnits) {
+            if (!fu.isFree()) computing.add(fu.debugString());
+        }
+        for (LoadBuffer lb : loadBuffers) {
+            if (lb.isBusy() && lb.getState() == LoadBuffer.State.EXECUTING) computing.add("LoadBuffer " + lb.getTag() + " Executing");
+        }
+        for (StoreBuffer sb : storeBuffers) {
+            if (sb.isBusy() && sb.getState() == StoreBuffer.State.EXECUTING) computing.add("StoreBuffer " + sb.getTag() + " Executing");
+        }
+        
+        if (!computing.isEmpty()) {
+            log("[EXECUTING] " + String.join(", ", computing));
+        }
     }
 
     /**
@@ -339,6 +374,7 @@ public class TomasuloSimulator {
         // If it was produced by an RS: free that RS
         for (ReservationStation rs : allRs()) {
             if (!rs.isFree() && rs.getTag().equals(tag) && rs.isResultReady()) {
+                log("[FREE] RS " + rs.getTag() + " freed");
                 rs.free();
                 return;
             }
@@ -346,6 +382,7 @@ public class TomasuloSimulator {
         // If it was produced by a load buffer: mark it done
         for (LoadBuffer lb : loadBuffers) {
             if (lb.getTag().equals(tag) && lb.isCdbReady()) {
+                log("[FREE] LoadBuffer " + lb.getTag() + " completed");
                 lb.onCdbWrittenBack(registerFile);
                 return;
             }
@@ -360,7 +397,7 @@ public class TomasuloSimulator {
             if (rs.isWaitingForFu()) {
                 FunctionalUnit fu = findFreeFuForOpcode(fpUnits, rs.getOpcode());
                 if (fu != null) {
-                    System.out.println("[DISPATCH] RS " + rs.getTag() +
+                    log("[DISPATCH] RS " + rs.getTag() +
                             " ( " + rs.getOpcode() + " ) -> FP ADD/SUB FU");
                     fu.start(rs);
                 }
@@ -371,7 +408,7 @@ public class TomasuloSimulator {
             if (rs.isWaitingForFu()) {
                 FunctionalUnit fu = findFreeFuForOpcode(fpUnits, rs.getOpcode());
                 if (fu != null) {
-                    System.out.println("[DISPATCH] RS " + rs.getTag() +
+                    log("[DISPATCH] RS " + rs.getTag() +
                             " ( " + rs.getOpcode() + " ) -> FP MUL/DIV FU");
                     fu.start(rs);
                 }
@@ -382,7 +419,7 @@ public class TomasuloSimulator {
             if (rs.isWaitingForFu()) {
                 FunctionalUnit fu = findFreeFuForOpcode(intUnits, rs.getOpcode());
                 if (fu != null) {
-                    System.out.println("[DISPATCH] RS " + rs.getTag() +
+                    log("[DISPATCH] RS " + rs.getTag() +
                             " ( " + rs.getOpcode() + " ) -> INT FU");
                     fu.start(rs);
                 }
@@ -412,7 +449,7 @@ public class TomasuloSimulator {
             // find free load buffer
             LoadBuffer lb = findFreeLoadBuffer();
             if (lb == null) {
-                System.out.println("[ISSUE] Stall: no free LoadBuffer for " + op);
+                log("[ISSUE] Stall: no free LoadBuffer for " + op);
                 return;
             }
             Tag tag = nextTag();
@@ -425,7 +462,7 @@ public class TomasuloSimulator {
             
             // Determine latency based on cache hit/miss
             int accessLatency = cache.getAccessLatency((int) ea);
-            System.out.println("[ISSUE] " + op + " -> LoadBuffer " + lb.getTag() +
+            log("[ISSUE] " + op + " -> LoadBuffer " + lb.getTag() +
                     " (tag=" + tag + ", seq=" + seq + ", latency=" + accessLatency + 
                     (cache.isHit((int) ea) ? " HIT" : " MISS") + ")");
             
@@ -438,7 +475,7 @@ public class TomasuloSimulator {
         if (instr.isStore()) {
             StoreBuffer sb = findFreeStoreBuffer();
             if (sb == null) {
-                System.out.println("[ISSUE] Stall: no free StoreBuffer for " + op);
+                log("[ISSUE] Stall: no free StoreBuffer for " + op);
                 return;
             }
             Tag tag = nextTag();
@@ -451,7 +488,7 @@ public class TomasuloSimulator {
             
             // Note: Cache hit/miss latency will be determined when execution starts
             // (when the value to store is ready)
-            System.out.println("[ISSUE] " + op + " -> StoreBuffer " + sb.getTag() +
+            log("[ISSUE] " + op + " -> StoreBuffer " + sb.getTag() +
                     " (tag=" + tag + ", seq=" + seq + ")");
             
             sb.issue(instr, registerFile, tag, seq);
@@ -463,10 +500,10 @@ public class TomasuloSimulator {
         if (instr.isFpAddSub()) {
             ReservationStation rs = findFreeRs(fpAddSubStations);
             if (rs == null) {
-                System.out.println("[ISSUE] Stall: no free FP ADD/SUB RS for " + op);
+                log("[ISSUE] Stall: no free FP ADD/SUB RS for " + op);
                 return;
             }
-            System.out.println("[ISSUE] " + op + " -> RS " + rs.getTag());
+            log("[ISSUE] " + op + " -> RS " + rs.getTag());
             rs.issue(instr, registerFile);
             iq.dequeue();
             return;
@@ -475,10 +512,10 @@ public class TomasuloSimulator {
         if (instr.isFpMulDiv()) {
             ReservationStation rs = findFreeRs(fpMulDivStations);
             if (rs == null) {
-                System.out.println("[ISSUE] Stall: no free FP MUL/DIV RS for " + op);
+                log("[ISSUE] Stall: no free FP MUL/DIV RS for " + op);
                 return;
             }
-            System.out.println("[ISSUE] " + op + " -> RS " + rs.getTag());
+            log("[ISSUE] " + op + " -> RS " + rs.getTag());
             rs.issue(instr, registerFile);
             iq.dequeue();
             return;
@@ -487,10 +524,10 @@ public class TomasuloSimulator {
         if (instr.isIntArithmetic()) {
             ReservationStation rs = findFreeRs(intStations);
             if (rs == null) {
-                System.out.println("[ISSUE] Stall: no free INT RS for " + op);
+                log("[ISSUE] Stall: no free INT RS for " + op);
                 return;
             }
-            System.out.println("[ISSUE] " + op + " -> RS " + rs.getTag());
+            log("[ISSUE] " + op + " -> RS " + rs.getTag());
             rs.issue(instr, registerFile);
             iq.dequeue();
             return;
@@ -498,7 +535,7 @@ public class TomasuloSimulator {
 
         // Branches / jumps: not implemented yet
         if (instr.isBranch()) {
-            System.out.println("[ISSUE] Branch not implemented yet, skipping: " + op);
+            log("[ISSUE] Branch not implemented yet, skipping: " + op);
             iq.dequeue();
         }
     }
