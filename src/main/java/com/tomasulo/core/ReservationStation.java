@@ -119,7 +119,8 @@ public class ReservationStation {
         }
 
         // Destination register gets Qi = our tag
-        if (destRegIndex >= 0) {
+        // R0 (index 0) is hardwired to 0 and cannot be written to, so we don't set Qi for it.
+        if (destRegIndex > 0) {
             regFile.get(destRegIndex).setQi(tag);
         }
 

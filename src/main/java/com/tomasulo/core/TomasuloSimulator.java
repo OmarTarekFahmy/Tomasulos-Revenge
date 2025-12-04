@@ -691,6 +691,7 @@ public class TomasuloSimulator {
      * Set a register value (for initialization)
      */
     public void setRegister(int regIndex, double value) {
+        if (regIndex == 0) return; // R0 is hardwired to 0
         registerFile.get(regIndex).setValue(value);
     }
 
@@ -698,6 +699,7 @@ public class TomasuloSimulator {
      * Set an integer register value
      */
     public void setIntRegister(int regNum, int value) {
+        if (regNum == 0) return; // R0 is hardwired to 0
         registerFile.get(r(regNum)).setValue(value);
     }
 

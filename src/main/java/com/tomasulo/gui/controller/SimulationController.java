@@ -98,23 +98,128 @@ public class SimulationController {
         view.log("Run complete. Total Cycles: " + simulator.getCycle());
     }
 
-    public void setRegister(String regName, double val) {
-        if (simulator == null) return;
+    public void setRegister(String regName, String valueStr) {
+        if (simulator == null) {
+            view.log("Simulator not initialized. Load a program first.");
+            return;
+        }
+        
+        regName = regName.toUpperCase();
+        
         try {
             int regIdx = -1;
             if (regName.startsWith("R")) {
                 regIdx = Integer.parseInt(regName.substring(1));
+                if (regIdx < 0 || regIdx >= 32) {
+                    view.log("Invalid integer register index: " + regName);
+                    return;
+                }
+                if (regIdx == 0) {
+                    view.log("Error: R0 cannot be modified.");
+                    return;
+                }
+                
+                // Validate integer value
+                try {
+                    int val = Integer.parseInt(valueStr);
+                    simulator.getRegisterFile().get(regIdx).setValue(val);
+                    view.updateView();
+                    view.log("Set " + regName + " to " + val);
+                } catch (NumberFormatException e) {
+                    view.log("Error: Integer register " + regName + " requires an integer value.");
+                }
+                
             } else if (regName.startsWith("F")) {
-                regIdx = Integer.parseInt(regName.substring(1)) + 32;
-            }
-
-            if (regIdx >= 0 && regIdx < 64) {
-                simulator.getRegisterFile().get(regIdx).setValue(val);
-                view.updateView();
-                view.log("Set " + regName + " to " + val);
+                regIdx = Integer.parseInt(regName.substring(1));
+                if (regIdx < 0 || regIdx >= 32) {
+                    view.log("Invalid FP register index: " + regName);
+                    return;
+                }
+                
+                try {
+                    double val = Double.parseDouble(valueStr);
+                    simulator.getRegisterFile().get(regIdx + 32).setValue(val);
+                    view.updateView();
+                    view.log("Set " + regName + " to " + val);
+                } catch (NumberFormatException e) {
+                    view.log("Error: Invalid number format for " + regName);
+                }
+            } else {
+                view.log("Unknown register type: " + regName);
             }
         } catch (Exception ex) {
-            view.log("Invalid input for register set.");
+            view.log("Invalid input for register set: " + ex.getMessage());
+        }
+    }
+
+    public void loadRegisterFile() {
+        if (simulator == null) {
+            view.log("Please load a program first to initialize the simulator.");
+            return;
+        }
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Open Register File");
+        File file = fileChooser.showOpenDialog(stage);
+        if (file != null) {
+            try {
+                List<String> lines = java.nio.file.Files.readAllLines(file.toPath());
+                for (String line : lines) {
+                    parseRegisterLine(line);
+                }
+                view.updateView();
+                view.log("Register file loaded.");
+            } catch (IOException e) {
+                view.log("Error reading register file: " + e.getMessage());
+            }
+        }
+    }
+
+    private void parseRegisterLine(String line) {
+        line = line.trim();
+        if (line.isEmpty() || line.startsWith("#") || line.startsWith("//")) return;
+
+        String[] parts = line.split("\\s+");
+        if (parts.length != 2) {
+            view.log("Invalid register line format: " + line);
+            return;
+        }
+
+        String regName = parts[0].toUpperCase();
+        String valueStr = parts[1];
+
+        try {
+            if (regName.startsWith("R")) {
+                int regIdx = Integer.parseInt(regName.substring(1));
+                if (regIdx < 0 || regIdx >= 32) {
+                     view.log("Invalid integer register index: " + regName);
+                     return;
+                }
+                // Validation: must be integer
+                try {
+                    int val = Integer.parseInt(valueStr);
+                    simulator.getRegisterFile().get(regIdx).setValue(val);
+                } catch (NumberFormatException e) {
+                    view.log("Error: Integer register " + regName + " requires an integer value. Got: " + valueStr);
+                }
+            } else if (regName.startsWith("F")) {
+                int regIdx = Integer.parseInt(regName.substring(1));
+                 if (regIdx < 0 || regIdx >= 32) {
+                     view.log("Invalid FP register index: " + regName);
+                     return;
+                }
+                // Validation: can be double
+                try {
+                    double val = Double.parseDouble(valueStr);
+                    // F0 is index 32 in the simulator's flat register file
+                    simulator.getRegisterFile().get(regIdx + 32).setValue(val);
+                } catch (NumberFormatException e) {
+                     view.log("Error: Invalid number format for " + regName + ": " + valueStr);
+                }
+            } else {
+                view.log("Unknown register type: " + regName);
+            }
+        } catch (Exception e) {
+            view.log("Error parsing line: " + line);
         }
     }
 }

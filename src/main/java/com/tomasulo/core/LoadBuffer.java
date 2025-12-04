@@ -102,7 +102,8 @@ public class LoadBuffer {
         this.remainingCycles = accessLatency;  // Use provided latency
 
         // Mark RF: Qi(dest) = our tag
-        if (destRegIndex >= 0) {
+        // R0 (index 0) is hardwired to 0 and cannot be written to.
+        if (destRegIndex > 0) {
             regFile.get(destRegIndex).setQi(tag);
         }
     }

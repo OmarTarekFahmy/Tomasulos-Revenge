@@ -46,6 +46,10 @@ public class SimulationView extends BorderPane {
     private TableView<CacheBlock> cacheTable;
     private TableView<Instruction> instructionQueueTable;
 
+    private TabPane tabPane;
+    private VBox allStationsPane;
+    private VBox centerPane;
+
 
     public SimulationView(SimulationController controller) {
         this.controller = controller;
@@ -70,10 +74,13 @@ public class SimulationView extends BorderPane {
         Button runBtn = new Button("Run All");
         runBtn.setOnAction(e -> controller.runAll());
 
+        javafx.scene.control.ToggleButton toggleViewBtn = new javafx.scene.control.ToggleButton("Show All Stations");
+        toggleViewBtn.setOnAction(e -> switchCenterView(toggleViewBtn.isSelected()));
+
         cycleLabel = new Label("Cycle: 0");
         cycleLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
 
-        topBar.getChildren().addAll(loadBtn, stepBtn, runBtn, cycleLabel);
+        topBar.getChildren().addAll(loadBtn, stepBtn, runBtn, toggleViewBtn, cycleLabel);
         setTop(topBar);
 
         // Left Side: Program Input & Instruction Queue
@@ -97,7 +104,7 @@ public class SimulationView extends BorderPane {
         setLeft(leftPane);
 
         // Center: Reservation Stations & Buffers
-        VBox centerPane = new VBox(10);
+        centerPane = new VBox(10);
         centerPane.setPadding(new Insets(10));
         
         fpAddTable = createRsTable("FP Add/Sub Stations");
@@ -106,7 +113,7 @@ public class SimulationView extends BorderPane {
         loadTable = createLoadTable();
         storeTable = createStoreTable();
 
-        TabPane tabPane = new TabPane();
+        tabPane = new TabPane();
         tabPane.getTabs().add(new Tab("FP Add/Sub", fpAddTable));
         tabPane.getTabs().add(new Tab("FP Mul/Div", fpMulTable));
         tabPane.getTabs().add(new Tab("Integer", intTable));
@@ -114,6 +121,9 @@ public class SimulationView extends BorderPane {
         tabPane.getTabs().add(new Tab("Store Buffers", storeTable));
         
         for(Tab t : tabPane.getTabs()) t.setClosable(false);
+
+        allStationsPane = new VBox(10);
+        // We will populate this when switching views
 
         centerPane.getChildren().add(tabPane);
         setCenter(centerPane);
@@ -145,7 +155,11 @@ public class SimulationView extends BorderPane {
         cacheTable.getColumns().addAll(cacheTagCol, cacheDirtyCol, cacheDataCol);
         cacheTable.setPlaceholder(new Label("Cache Empty / Invalid"));
 
-        rightPane.getChildren().addAll(new Label("Register File"), registerTable, createSetRegisterButton(), new Label("Cache Content"), cacheTable);
+        Button loadRegBtn = new Button("Load Register File");
+        loadRegBtn.setMaxWidth(Double.MAX_VALUE);
+        loadRegBtn.setOnAction(e -> controller.loadRegisterFile());
+
+        rightPane.getChildren().addAll(new Label("Register File"), registerTable, createSetRegisterButton(), loadRegBtn, new Label("Cache Content"), cacheTable);
         setRight(rightPane);
 
 
@@ -156,6 +170,41 @@ public class SimulationView extends BorderPane {
         setBottom(logArea);
     }
 
+    private void switchCenterView(boolean showAll) {
+        centerPane.getChildren().clear();
+        if (showAll) {
+            // Detach from tabs
+            for (Tab t : tabPane.getTabs()) {
+                t.setContent(null);
+            }
+            
+            allStationsPane.getChildren().clear();
+            allStationsPane.getChildren().addAll(
+                new Label("FP Add/Sub Stations"), fpAddTable,
+                new Label("FP Mul/Div Stations"), fpMulTable,
+                new Label("Integer Stations"), intTable,
+                new Label("Load Buffers"), loadTable,
+                new Label("Store Buffers"), storeTable
+            );
+            
+            javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(allStationsPane);
+            scroll.setFitToWidth(true);
+            centerPane.getChildren().add(scroll);
+        } else {
+            // Detach from VBox
+            allStationsPane.getChildren().clear();
+            
+            // Re-attach to tabs
+            tabPane.getTabs().get(0).setContent(fpAddTable);
+            tabPane.getTabs().get(1).setContent(fpMulTable);
+            tabPane.getTabs().get(2).setContent(intTable);
+            tabPane.getTabs().get(3).setContent(loadTable);
+            tabPane.getTabs().get(4).setContent(storeTable);
+            
+            centerPane.getChildren().add(tabPane);
+        }
+    }
+
     private Button createSetRegisterButton() {
         Button btn = new Button("Set Register Value");
         btn.setMaxWidth(Double.MAX_VALUE);
@@ -164,15 +213,11 @@ public class SimulationView extends BorderPane {
             dialog.setTitle("Set Register");
             dialog.setHeaderText("Enter Register and Value (e.g., R1 50 or F2 3.14)");
             dialog.showAndWait().ifPresent(result -> {
-                String[] parts = result.split(" ");
+                String[] parts = result.trim().split("\\s+");
                 if (parts.length == 2) {
-                    try {
-                        String regName = parts[0];
-                        double val = Double.parseDouble(parts[1]);
-                        controller.setRegister(regName, val);
-                    } catch (Exception ex) {
-                        log("Invalid input for register set.");
-                    }
+                    controller.setRegister(parts[0], parts[1]);
+                } else {
+                    log("Invalid format. Use: REG VALUE");
                 }
             });
         });

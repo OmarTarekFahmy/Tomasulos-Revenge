@@ -14,7 +14,8 @@ public class CommonDataBus {
         if (msg == null) return;
 
         // 1) write into register file (only if Qi matches)
-        if (msg.destRegIndex() >= 0) {
+        // R0 (index 0) is hardwired to 0 and cannot be written to.
+        if (msg.destRegIndex() > 0) {
             Register dest = regFile.get(msg.destRegIndex());
             if (msg.tag().equals(dest.getQi())) {
                 dest.setValue(msg.value());
