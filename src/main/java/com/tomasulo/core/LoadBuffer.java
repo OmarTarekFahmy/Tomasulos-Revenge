@@ -147,10 +147,10 @@ public class LoadBuffer {
         if (state != State.EXECUTING)
             return;
 
-        // First tick after entering EXECUTING state just marks execution started
+        // First tick in EXECUTING state - mark started but still decrement
+        // (The ISSUED cycle was the "issue" cycle, now we start counting down)
         if (!executionStarted) {
             executionStarted = true;
-            return;  // Don't decrement on the first cycle
         }
 
         remainingCycles--;

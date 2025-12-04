@@ -884,15 +884,19 @@ public class TomasuloSimulator {
         TomasuloSimulator sim = new TomasuloSimulator(program, config);
         
         // Initialize registers and memory for testing
-        sim.setIntRegister(2, 100);  // R2 = 100 (base address)
-        sim.setMemoryDouble(100, 1.0);  // 0(R2)
-        sim.setMemoryDouble(108, 2.0);  // 8(R2)
-        sim.setMemoryDouble(120, 3.0);  // 20(R2)
-        sim.setFpRegister(1, 10.0);
-        sim.setFpRegister(2, 2.0);
-        sim.setFpRegister(3, 3.0);
-        sim.setFpRegister(4, 4.0);
+        // For the loop program: R1 starts at 0, gets 24 added, decrements by 8 until R1==R2
+        // R2 starts at 0 (loop termination condition)
+        sim.setIntRegister(1, 0);    // R1 = 0 (will become 24 after DADDI)
+        sim.setIntRegister(2, 0);    // R2 = 0 (loop termination value)
         
-        sim.run(50);
+        // Memory locations that will be accessed: 8(R1) where R1 = 24, 16, 8
+        // So addresses: 32, 24, 16
+        sim.setMemoryDouble(32, 1.0);   // 8 + 24 = 32
+        sim.setMemoryDouble(24, 2.0);   // 8 + 16 = 24  
+        sim.setMemoryDouble(16, 3.0);   // 8 + 8 = 16
+        
+        sim.setFpRegister(2, 2.0);   // F2 = 2.0 (multiplier)
+        
+        sim.run(100);
     }
 }

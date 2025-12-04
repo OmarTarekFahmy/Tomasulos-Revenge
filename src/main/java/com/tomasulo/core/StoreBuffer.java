@@ -194,10 +194,9 @@ public class StoreBuffer {
         if (state != State.EXECUTING)
             return;
 
-        // First tick after entering EXECUTING state just marks execution started
+        // First tick in EXECUTING state - mark started but still decrement
         if (!executionStarted) {
             executionStarted = true;
-            return;  // Don't decrement on the first cycle
         }
 
         remainingCycles--;
