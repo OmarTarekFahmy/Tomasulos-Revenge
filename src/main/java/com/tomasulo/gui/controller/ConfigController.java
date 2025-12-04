@@ -1,8 +1,9 @@
 package com.tomasulo.gui.controller;
 
+import java.util.ArrayList;
+
 import com.tomasulo.core.TomasuloSimulator;
 import com.tomasulo.gui.SimulationView;
-import java.util.ArrayList;
 
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
