@@ -22,8 +22,8 @@ public class ConfigView extends VBox {
     private final TextField numIntRs = new TextField("3");
     private final TextField numFpAddRs = new TextField("3");
     private final TextField numFpMulRs = new TextField("3");
-    private final TextField numLoadBuffers = new TextField("3");
-    private final TextField numStoreBuffers = new TextField("3");
+    private final TextField numLoadBuffers = new TextField("2");
+    private final TextField numStoreBuffers = new TextField("2");
 
     // Cache
     private final TextField cacheSize = new TextField("1024");

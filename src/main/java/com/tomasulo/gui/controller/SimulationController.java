@@ -63,7 +63,7 @@ public class SimulationController {
         }
     }
 
-    private void initSimulator(List<Instruction> instructions) {
+    public void initSimulator(List<Instruction> instructions) {
         simulator = new TomasuloSimulator(instructions, config);
         view.updateView();
         view.log("Program loaded. " + instructions.size() + " instructions.");
