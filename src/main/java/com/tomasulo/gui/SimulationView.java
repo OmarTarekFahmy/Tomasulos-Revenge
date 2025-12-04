@@ -251,13 +251,9 @@ public class SimulationView extends BorderPane {
         FileChooser fileChooser = new FileChooser();
         File file = fileChooser.showOpenDialog(stage);
         if (file != null) {
-            try {
                 InstructionParser parser = new InstructionParser();
                 List<Instruction> instructions = parser.parseFile(file.getAbsolutePath());
                 initSimulator(instructions);
-            } catch (IOException e) {
-                log("Error loading file: " + e.getMessage());
-            }
         }
     }
 
