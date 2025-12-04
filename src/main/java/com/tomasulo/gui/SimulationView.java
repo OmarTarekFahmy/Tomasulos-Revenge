@@ -13,6 +13,7 @@ import com.tomasulo.core.StoreBuffer;
 import com.tomasulo.core.TomasuloSimulator;
 import com.tomasulo.gui.controller.SimulationController;
 
+import javafx.beans.binding.Bindings;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
@@ -25,6 +26,8 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
@@ -47,7 +50,6 @@ public class SimulationView extends BorderPane {
     private TableView<Instruction> instructionQueueTable;
 
     private TabPane tabPane;
-    private VBox allStationsPane;
     private VBox centerPane;
 
 
@@ -122,9 +124,6 @@ public class SimulationView extends BorderPane {
         
         for(Tab t : tabPane.getTabs()) t.setClosable(false);
 
-        allStationsPane = new VBox(10);
-        // We will populate this when switching views
-
         centerPane.getChildren().add(tabPane);
         setCenter(centerPane);
 
@@ -178,22 +177,35 @@ public class SimulationView extends BorderPane {
                 t.setContent(null);
             }
             
-            allStationsPane.getChildren().clear();
-            allStationsPane.getChildren().addAll(
-                new Label("FP Add/Sub Stations"), fpAddTable,
-                new Label("FP Mul/Div Stations"), fpMulTable,
-                new Label("Integer Stations"), intTable,
-                new Label("Load Buffers"), loadTable,
-                new Label("Store Buffers"), storeTable
-            );
+            GridPane grid = new GridPane();
+            grid.setHgap(10);
+            grid.setVgap(10);
+            grid.setPadding(new Insets(10));
             
-            javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(allStationsPane);
+            // Row 0
+            grid.add(createTableBox("FP Add/Sub Stations", fpAddTable), 0, 0);
+            grid.add(createTableBox("FP Mul/Div Stations", fpMulTable), 1, 0);
+            
+            // Row 1
+            grid.add(createTableBox("Integer Stations", intTable), 0, 1);
+            grid.add(createTableBox("Load Buffers", loadTable), 1, 1);
+            
+            // Row 2
+            VBox storeBox = createTableBox("Store Buffers", storeTable);
+            grid.add(storeBox, 0, 2);
+            GridPane.setColumnSpan(storeBox, 2);
+            
+            // Make columns grow
+            ColumnConstraints col1 = new ColumnConstraints();
+            col1.setPercentWidth(50);
+            ColumnConstraints col2 = new ColumnConstraints();
+            col2.setPercentWidth(50);
+            grid.getColumnConstraints().addAll(col1, col2);
+            
+            javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(grid);
             scroll.setFitToWidth(true);
             centerPane.getChildren().add(scroll);
         } else {
-            // Detach from VBox
-            allStationsPane.getChildren().clear();
-            
             // Re-attach to tabs
             tabPane.getTabs().get(0).setContent(fpAddTable);
             tabPane.getTabs().get(1).setContent(fpMulTable);
@@ -203,6 +215,12 @@ public class SimulationView extends BorderPane {
             
             centerPane.getChildren().add(tabPane);
         }
+    }
+
+    private VBox createTableBox(String title, TableView<?> table) {
+        VBox box = new VBox(5);
+        box.getChildren().addAll(new Label(title), table);
+        return box;
     }
 
     private Button createSetRegisterButton() {
@@ -227,6 +245,10 @@ public class SimulationView extends BorderPane {
 
     private TableView<ReservationStation> createRsTable(String title) {
         TableView<ReservationStation> table = new TableView<>();
+        table.setFixedCellSize(25);
+        table.prefHeightProperty().bind(Bindings.size(table.getItems()).multiply(table.getFixedCellSize()).add(30));
+        table.minHeightProperty().bind(table.prefHeightProperty());
+        table.maxHeightProperty().bind(table.prefHeightProperty());
         
         TableColumn<ReservationStation, String> tagCol = new TableColumn<>("Tag");
         tagCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getTag().toString()));
@@ -255,6 +277,11 @@ public class SimulationView extends BorderPane {
 
     private TableView<LoadBuffer> createLoadTable() {
         TableView<LoadBuffer> table = new TableView<>();
+        table.setFixedCellSize(25);
+        table.prefHeightProperty().bind(Bindings.size(table.getItems()).multiply(table.getFixedCellSize()).add(30));
+        table.minHeightProperty().bind(table.prefHeightProperty());
+        table.maxHeightProperty().bind(table.prefHeightProperty());
+
         TableColumn<LoadBuffer, String> tagCol = new TableColumn<>("Tag");
         tagCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getTag().toString()));
         
@@ -270,6 +297,11 @@ public class SimulationView extends BorderPane {
 
     private TableView<StoreBuffer> createStoreTable() {
         TableView<StoreBuffer> table = new TableView<>();
+        table.setFixedCellSize(25);
+        table.prefHeightProperty().bind(Bindings.size(table.getItems()).multiply(table.getFixedCellSize()).add(30));
+        table.minHeightProperty().bind(table.prefHeightProperty());
+        table.maxHeightProperty().bind(table.prefHeightProperty());
+
         TableColumn<StoreBuffer, String> tagCol = new TableColumn<>("Tag");
         tagCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getTag().toString()));
         
@@ -295,19 +327,19 @@ public class SimulationView extends BorderPane {
 
         cycleLabel.setText("Cycle: " + simulator.getCycle());
 
-        fpAddTable.setItems(FXCollections.observableArrayList(simulator.getFpAddSubStations()));
+        fpAddTable.getItems().setAll(simulator.getFpAddSubStations());
         fpAddTable.refresh();
 
-        fpMulTable.setItems(FXCollections.observableArrayList(simulator.getFpMulDivStations()));
+        fpMulTable.getItems().setAll(simulator.getFpMulDivStations());
         fpMulTable.refresh();
 
-        intTable.setItems(FXCollections.observableArrayList(simulator.getIntStations()));
+        intTable.getItems().setAll(simulator.getIntStations());
         intTable.refresh();
 
-        loadTable.setItems(FXCollections.observableArrayList(simulator.getLoadBuffers()));
+        loadTable.getItems().setAll(simulator.getLoadBuffers());
         loadTable.refresh();
 
-        storeTable.setItems(FXCollections.observableArrayList(simulator.getStoreBuffers()));
+        storeTable.getItems().setAll(simulator.getStoreBuffers());
         storeTable.refresh();
         
         // Registers
@@ -319,7 +351,7 @@ public class SimulationView extends BorderPane {
         for (int i = 0; i < 32; i++) {
             regWrappers.add(new RegisterWrapper("F" + i, rf.get(i + 32)));
         }
-        registerTable.setItems(FXCollections.observableArrayList(regWrappers));
+        registerTable.getItems().setAll(regWrappers);
         registerTable.refresh();
 
         // Cache
@@ -329,11 +361,11 @@ public class SimulationView extends BorderPane {
                 validBlocks.add(b);
             }
         }
-        cacheTable.setItems(FXCollections.observableArrayList(validBlocks));
+        cacheTable.getItems().setAll(validBlocks);
         cacheTable.refresh();
         
         // Instruction Queue
-        instructionQueueTable.setItems(FXCollections.observableArrayList(simulator.getInstructionQueue().toList()));
+        instructionQueueTable.getItems().setAll(simulator.getInstructionQueue().toList());
         instructionQueueTable.refresh();
     }
 

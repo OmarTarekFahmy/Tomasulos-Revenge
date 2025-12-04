@@ -2,6 +2,7 @@ package com.tomasulo.gui.controller;
 
 import com.tomasulo.core.TomasuloSimulator;
 import com.tomasulo.gui.SimulationView;
+import java.util.ArrayList;
 
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
@@ -40,11 +41,19 @@ public class ConfigController {
             config.cacheHitLatency = Integer.parseInt(cacheHitLatency.getText());
             config.cacheMissPenalty = Integer.parseInt(cacheMissPenalty.getText());
 
+            if (config.numIntRs < 1 || config.numFpAddSubRs < 1 || config.numFpMulDivRs < 1 || 
+                config.numLoadBuffers < 1 || config.numStoreBuffers < 1) {
+                throw new NumberFormatException("Counts must be positive");
+            }
+
             // TODO: Validate configuration values (e.g., cache size power of 2)
 
             SimulationController simController = new SimulationController(stage, config);
             SimulationView simView = new SimulationView(simController);
             simController.setView(simView); // Link view back to controller if needed, or just pass controller to view
+            
+            // Initialize with empty program to show structure
+            simController.initSimulator(new ArrayList<>());
 
             Scene scene = new Scene(simView, 1200, 800);
             stage.setTitle("Tomasulo Simulator - Running");
