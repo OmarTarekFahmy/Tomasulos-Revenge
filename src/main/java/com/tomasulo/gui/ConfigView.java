@@ -16,24 +16,23 @@ public class ConfigView extends VBox {
 
     private final Stage stage;
 
-    // Latencies
-    private TextField intAluLatency = new TextField("1");
-    private TextField fpAddSubLatency = new TextField("3");
-    private TextField fpMulLatency = new TextField("5");
-    private TextField fpDivLatency = new TextField("12");
-
+    // Latencies final
+    private final TextField intAluLatency = new TextField("1");
+    private final TextField fpAddSubLatency = new TextField("3");
+    private final TextField fpMulLatency = new TextField("5");
+    private final TextField fpDivLatency = new TextField("12");
     // Counts
-    private TextField numIntRs = new TextField("3");
-    private TextField numFpAddRs = new TextField("3");
-    private TextField numFpMulRs = new TextField("3");
-    private TextField numLoadBuffers = new TextField("3");
-    private TextField numStoreBuffers = new TextField("3");
+    private final TextField numIntRs = new TextField("3");
+    private final TextField numFpAddRs = new TextField("3");
+    private final TextField numFpMulRs = new TextField("3");
+    private final TextField numLoadBuffers = new TextField("3");
+    private final TextField numStoreBuffers = new TextField("3");
 
     // Cache
-    private TextField cacheSize = new TextField("1024");
-    private TextField blockSize = new TextField("64");
-    private TextField cacheHitLatency = new TextField("1");
-    private TextField cacheMissPenalty = new TextField("10");
+    private final TextField cacheSize = new TextField("1024");
+    private final TextField blockSize = new TextField("64");
+    private final TextField cacheHitLatency = new TextField("1");
+    private final TextField cacheMissPenalty = new TextField("10");
 
     public ConfigView(Stage stage) {
         this.stage = stage;

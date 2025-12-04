@@ -10,7 +10,7 @@ public class CdbMessage {
         this.value = value;
         this.destRegIndex = destRegIndex;
     }
-
+    @Override
     public String toString() {
         return String.format("CdbMessage(tag=%s, value=%.2f, destReg=%d)", tag, value, destRegIndex);
     }

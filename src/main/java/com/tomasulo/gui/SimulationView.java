@@ -1,22 +1,36 @@
 package com.tomasulo.gui;
 
-import com.tomasulo.core.*;
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.tomasulo.core.CacheBlock;
+import com.tomasulo.core.Instruction;
+import com.tomasulo.core.LoadBuffer;
+import com.tomasulo.core.Register;
+import com.tomasulo.core.RegisterFile;
+import com.tomasulo.core.ReservationStation;
+import com.tomasulo.core.StoreBuffer;
+import com.tomasulo.core.TomasuloSimulator;
 import com.tomasulo.parser.InstructionParser;
-import javafx.beans.property.SimpleObjectProperty;
+
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
-import javafx.scene.control.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
-
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 
 public class SimulationView extends BorderPane {
 
@@ -124,7 +138,7 @@ public class SimulationView extends BorderPane {
         TableColumn<RegisterWrapper, String> regQiCol = new TableColumn<>("Qi");
         regQiCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().register.getQi().toString()));
         
-        registerTable.getColumns().addAll(regNameCol, regValCol, regQiCol);
+        registerTable.getColumns().addAll(regNameCol, regQiCol, regValCol);
         
         // Cache Table
         cacheTable = new TableView<>();
@@ -151,6 +165,7 @@ public class SimulationView extends BorderPane {
 
     private Button createSetRegisterButton() {
         Button btn = new Button("Set Register Value");
+        btn.setMaxWidth(Double.MAX_VALUE);
         btn.setOnAction(e -> {
             TextInputDialog dialog = new TextInputDialog("R0 100");
             dialog.setTitle("Set Register");
