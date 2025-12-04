@@ -27,6 +27,7 @@ public class TomasuloSimulator {
     private final int numIntRs;
     private final int numLoadBuffers;
     private final int numStoreBuffers;
+    private final int numBranchHandlers;
 
     // Latencies for functional units (set by user)
     private final int intAluLatency;
@@ -59,6 +60,11 @@ public class TomasuloSimulator {
     private final List<LoadBuffer> loadBuffers = new ArrayList<>();
     private final List<StoreBuffer> storeBuffers = new ArrayList<>();
 
+    // Branch handling
+    private final List<BranchHandler> branchHandlers = new ArrayList<>();
+    private int programCounter = 0;  // Current PC (index into program)
+    private boolean branchPending = false;  // True if a branch is in-flight
+
     private final CommonDataBus cdb = new CommonDataBus();
 
     private int cycle = 0;
@@ -88,12 +94,14 @@ public class TomasuloSimulator {
         public int numIntRs = 3;
         public int numLoadBuffers = 2;
         public int numStoreBuffers = 2;
+        public int numBranchHandlers = 1; // Branch unit(s)
         
         // Functional unit latencies
         public int intAluLatency = 1;
         public int fpAddSubLatency = 3;
         public int fpMulLatency = 5;
         public int fpDivLatency = 12;
+        public int branchLatency = 1;     // Latency for branch evaluation
         
         // Cache configuration
         public int cacheSize = 1024;      // bytes
@@ -120,6 +128,7 @@ public class TomasuloSimulator {
         this.numIntRs = config.numIntRs;
         this.numLoadBuffers = config.numLoadBuffers;
         this.numStoreBuffers = config.numStoreBuffers;
+        this.numBranchHandlers = config.numBranchHandlers;
         
         this.intAluLatency = config.intAluLatency;
         this.fpAddSubLatency = config.fpAddSubLatency;
@@ -194,6 +203,11 @@ public class TomasuloSimulator {
         for (int i = 0; i < numStoreBuffers; i++) {
             storeBuffers.add(new StoreBuffer(new Tag("S" + (i + 1)), cache));
         }
+
+        // Branch handlers
+        for (int i = 0; i < numBranchHandlers; i++) {
+            branchHandlers.add(new BranchHandler(new Tag("B" + (i + 1))));
+        }
     }
 
     private Tag nextTag() {
@@ -216,7 +230,7 @@ public class TomasuloSimulator {
     }
 
     public boolean isFinished() {
-        return iq.isEmpty() && !anyBusy();
+        return iq.isEmpty() && !anyBusy() && !branchPending;
     }
 
     public void step() {
@@ -224,8 +238,9 @@ public class TomasuloSimulator {
         cycleLog.clear();
         log("\n========== CYCLE " + cycle + " ==========");
 
-        // 0) Tick all RS to advance from ISSUED -> WAITING_FOR_OPERANDS
+        // 0) Tick all RS and branch handlers to advance state machines
         tickReservationStations();
+        tickBranchHandlers();
 
         // 1) Execute FUs + memory and collect finished results
         List<CdbMessage> readyMessages = new ArrayList<>();
@@ -241,16 +256,19 @@ public class TomasuloSimulator {
             handleProducerFree(chosen.tag());
         }
 
-        // 3) Wake up RS (already done via CDB) and dispatch RS -> FU
+        // 3) Evaluate branches that are ready
+        evaluateBranches();
+
+        // 4) Wake up RS (already done via CDB) and dispatch RS -> FU
         dispatchReadyRsToFus();
 
-        // 4) Issue from IQ
+        // 5) Issue from IQ
         issueFromQueue();
 
-        // 5) Log currently computing instructions
+        // 6) Log currently computing instructions
         logComputingInstructions();
 
-        // 6) Debug prints
+        // 7) Debug prints
         printState();
     }
 
@@ -290,6 +308,58 @@ public class TomasuloSimulator {
         }
     }
 
+    /**
+     * Tick all branch handlers to advance their state machines
+     */
+    private void tickBranchHandlers() {
+        for (BranchHandler bh : branchHandlers) {
+            bh.tick();
+        }
+    }
+
+    /**
+     * Evaluate branches that are ready and handle taken branches
+     */
+    private void evaluateBranches() {
+        for (BranchHandler bh : branchHandlers) {
+            if (bh.isReadyToEvaluate()) {
+                boolean taken = bh.evaluate();
+                Instruction instr = bh.getInstruction();
+                
+                log("[BRANCH] " + instr.getOpcode() + " evaluated: " + (taken ? "TAKEN" : "NOT TAKEN") + 
+                    ", nextPC=" + bh.getNextPC());
+                
+                if (taken) {
+                    // Jump to target - reload instruction queue from target PC
+                    int targetPC = bh.getNextPC();
+                    reloadInstructionQueue(targetPC);
+                }
+                
+                // Free the branch handler
+                bh.free();
+                branchPending = false;
+            }
+        }
+    }
+
+    /**
+     * Reload the instruction queue starting from the given PC (instruction index)
+     */
+    private void reloadInstructionQueue(int targetPC) {
+        // Clear current instruction queue
+        while (!iq.isEmpty()) {
+            iq.dequeue();
+        }
+        
+        // Reload from target PC
+        programCounter = targetPC;
+        for (int i = targetPC; i < program.size(); i++) {
+            iq.enqueue(program.get(i));
+        }
+        
+        log("[BRANCH] Reloaded IQ from PC=" + targetPC + ", " + iq.size() + " instructions remaining");
+    }
+
     private boolean anyBusy() {
         return fpAddSubStations.stream().anyMatch(rs -> !rs.isFree())
                 || fpMulDivStations.stream().anyMatch(rs -> !rs.isFree())
@@ -297,7 +367,8 @@ public class TomasuloSimulator {
                 || loadBuffers.stream().anyMatch(LoadBuffer::isBusy)
                 || storeBuffers.stream().anyMatch(StoreBuffer::isBusy)
                 || fpUnits.stream().anyMatch(fu -> !fu.isFree())
-                || intUnits.stream().anyMatch(fu -> !fu.isFree());
+                || intUnits.stream().anyMatch(fu -> !fu.isFree())
+                || branchHandlers.stream().anyMatch(BranchHandler::isBusy);
     }
 
     // --- 1) Tick functional units ---
@@ -359,8 +430,13 @@ public class TomasuloSimulator {
     }
 
     private void broadcastOnCdb(CdbMessage msg) {
-        // write value into RF and wake all RS / store buffers waiting on this tag
+        // write value into RF and wake all RS / store buffers / branch handlers waiting on this tag
         cdb.broadcastOne(msg, allRs(), loadBuffers, storeBuffers, registerFile);
+        
+        // Also broadcast to branch handlers
+        for (BranchHandler bh : branchHandlers) {
+            bh.onCdbBroadcast(msg.tag(), msg.value());
+        }
     }
 
     private List<ReservationStation> allRs() {
@@ -469,6 +545,7 @@ public class TomasuloSimulator {
             lb.issue(instr, registerFile, tag, seq, accessLatency);
             lb.setEffectiveAddress(ea);
             iq.dequeue();
+            programCounter++;
             return;
         }
 
@@ -494,6 +571,7 @@ public class TomasuloSimulator {
             sb.issue(instr, registerFile, tag, seq);
             sb.setEffectiveAddress(ea);
             iq.dequeue();
+            programCounter++;
             return;
         }
 
@@ -506,6 +584,7 @@ public class TomasuloSimulator {
             log("[ISSUE] " + op + " -> RS " + rs.getTag());
             rs.issue(instr, registerFile);
             iq.dequeue();
+            programCounter++;
             return;
         }
 
@@ -518,6 +597,7 @@ public class TomasuloSimulator {
             log("[ISSUE] " + op + " -> RS " + rs.getTag());
             rs.issue(instr, registerFile);
             iq.dequeue();
+            programCounter++;
             return;
         }
 
@@ -530,14 +610,45 @@ public class TomasuloSimulator {
             log("[ISSUE] " + op + " -> RS " + rs.getTag());
             rs.issue(instr, registerFile);
             iq.dequeue();
+            programCounter++;
             return;
         }
 
-        // Branches / jumps: not implemented yet
+        // Branches (BEQ, BNE)
         if (instr.isBranch()) {
-            log("[ISSUE] Branch not implemented yet, skipping: " + op);
+            // If a branch is already pending, stall
+            if (branchPending) {
+                log("[ISSUE] Stall: branch already pending for " + op);
+                return;
+            }
+            
+            // Find free branch handler
+            BranchHandler bh = findFreeBranchHandler();
+            if (bh == null) {
+                log("[ISSUE] Stall: no free BranchHandler for " + op);
+                return;
+            }
+            
+            log("[ISSUE] " + op + " -> BranchHandler " + bh.getTag() + " (PC=" + programCounter + ")");
+            bh.issue(instr, registerFile, programCounter);
+            branchPending = true;
             iq.dequeue();
+            programCounter++;
+            return;
         }
+
+        // Unknown instruction type
+        log("[ISSUE] Unknown instruction type, skipping: " + op);
+        iq.dequeue();
+        programCounter++;
+    }
+
+    private BranchHandler findFreeBranchHandler() {
+        for (BranchHandler bh : branchHandlers) {
+            if (bh.isFree())
+                return bh;
+        }
+        return null;
     }
 
     private LoadBuffer findFreeLoadBuffer() {
@@ -613,6 +724,12 @@ public class TomasuloSimulator {
             System.out.println("  " + sb.debugString());
         }
 
+        System.out.println("[STATE] Branch Handlers:");
+        for (BranchHandler bh : branchHandlers) {
+            System.out.println("  " + bh.debugString());
+        }
+        System.out.println("[STATE] Branch Pending: " + branchPending + ", PC: " + programCounter);
+
         System.out.println("[STATE] FP Registers (F0..F10):");
         for (int i = 0; i <= 10; i++) {
             Register r = registerFile.get(f(i));
@@ -676,6 +793,18 @@ public class TomasuloSimulator {
 
     public List<StoreBuffer> getStoreBuffers() {
         return storeBuffers;
+    }
+
+    public List<BranchHandler> getBranchHandlers() {
+        return branchHandlers;
+    }
+
+    public int getProgramCounter() {
+        return programCounter;
+    }
+
+    public boolean isBranchPending() {
+        return branchPending;
     }
 
     public InstructionQueue getInstructionQueue() {

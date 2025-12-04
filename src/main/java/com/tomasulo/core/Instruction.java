@@ -10,7 +10,7 @@ public class Instruction {
         // Arithmetic (integer)
         DADDI, DSUBI,
 
-        // Branches
+        // Branches (conditional)
         BEQ, BNE,
 
         // FP ADD/SUB
@@ -123,10 +123,15 @@ public class Instruction {
             case
                     // FP binary
                     ADD_D, SUB_D, MUL_D, DIV_D,
-                    // branches
+                    // branches (comparing two registers)
                     BEQ, BNE ->
                 true;
             default -> false;
         };
+    }
+
+    @Override
+    public String toString() {
+        return opcode.toString();
     }
 }
