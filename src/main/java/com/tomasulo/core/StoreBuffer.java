@@ -4,6 +4,7 @@ public class StoreBuffer {
 
     public enum State {
         FREE,
+        ISSUED,                // Just issued this cycle, will transition next cycle
         WAITING_FOR_ADDRESS,   // Address not yet computed
         WAITING_FOR_VALUE,     // Address ready, but waiting for source value via CDB
         EXECUTING              // Both address and value ready, performing memory access
@@ -121,7 +122,7 @@ public class StoreBuffer {
         }
 
         this.addressReady = false;
-        this.state = State.WAITING_FOR_ADDRESS;
+        this.state = State.ISSUED;  // Start in ISSUED state for one cycle
         this.remainingCycles = 0;  // Will be set when execution starts
     }
 
@@ -134,9 +135,10 @@ public class StoreBuffer {
     /**
      * Update state based on whether address and value are ready.
      * When both are ready, transition to EXECUTING and determine cache latency.
+     * Note: This should NOT be called while in ISSUED state - wait for tick() to transition first.
      */
     private void updateState() {
-        if (!busy || state == State.EXECUTING || state == State.FREE) {
+        if (!busy || state == State.EXECUTING || state == State.FREE || state == State.ISSUED) {
             return;
         }
         
@@ -159,17 +161,43 @@ public class StoreBuffer {
 
     /**
      * Called every cycle from the simulator.
+     * Handles state transitions: ISSUED -> appropriate next state
      * Execution starts the cycle AFTER state becomes EXECUTING.
      * When finished, the store actually writes to memory.
      */
     public void tick(IMemory memory) {
-        if (!busy || state != State.EXECUTING)
+        if (!busy)
+            return;
+
+        // Transition from ISSUED to next appropriate state after one cycle
+        if (state == State.ISSUED) {
+            if (addressReady && valueReady) {
+                // Both ready, go straight to EXECUTING
+                int accessLatency = cache.getAccessLatency((int) effectiveAddress);
+                this.remainingCycles = accessLatency;
+                this.executionStarted = false;
+                state = State.EXECUTING;
+                
+                boolean isHit = cache.isHit((int) effectiveAddress);
+                System.out.println("[STORE] " + name + " starting execution at EA=" + effectiveAddress + 
+                        " (latency=" + accessLatency + (isHit ? " HIT" : " MISS") + ")");
+            } else if (addressReady && !valueReady) {
+                // Address ready but waiting for value
+                state = State.WAITING_FOR_VALUE;
+            } else {
+                // Waiting for address
+                state = State.WAITING_FOR_ADDRESS;
+            }
+            return;
+        }
+
+        if (state != State.EXECUTING)
             return;
 
         // First tick after entering EXECUTING state just marks execution started
         if (!executionStarted) {
             executionStarted = true;
-            return;  // Don't decrement on the first cycle (issue cycle)
+            return;  // Don't decrement on the first cycle
         }
 
         remainingCycles--;

@@ -4,9 +4,10 @@ public class LoadBuffer {
 
     public enum State {
         FREE,
-        WAITING_FOR_ADDRESS,
-        EXECUTING,
-        RESULT_READY
+        ISSUED,              // Just issued this cycle, will transition next cycle
+        WAITING_FOR_ADDRESS,  // Waiting for base register to compute EA
+        EXECUTING,            // Address ready, accessing memory
+        RESULT_READY          // Memory access complete, ready to broadcast on CDB
     }
 
     private final String name; // e.g. "L1" (for printing)
@@ -26,6 +27,7 @@ public class LoadBuffer {
     private int remainingCycles = 0;
     private State state = State.FREE;
     private boolean executionStarted = false;  // Track if execution has started
+    private boolean addressReady = false;      // Track if effective address is computed
 
     public LoadBuffer(Tag initialTag, int memLatency) {
         this.name = initialTag.name(); // just for debug
@@ -98,8 +100,10 @@ public class LoadBuffer {
         this.baseRegIndex = instr.getBaseReg();
         this.offset = instr.getOffset();
 
-        this.state = State.WAITING_FOR_ADDRESS;
+        this.state = State.ISSUED;  // Start in ISSUED state for one cycle
         this.remainingCycles = accessLatency;  // Use provided latency
+        this.addressReady = false;
+        this.executionStarted = false;
 
         // Mark RF: Qi(dest) = our tag
         // R0 (index 0) is hardwired to 0 and cannot be written to.
@@ -110,23 +114,43 @@ public class LoadBuffer {
 
     public void setEffectiveAddress(long ea) {
         this.effectiveAddress = ea;
+        this.addressReady = true;
+        // If already past ISSUED state, transition to EXECUTING
         if (state == State.WAITING_FOR_ADDRESS) {
             state = State.EXECUTING;
+            executionStarted = false;  // Reset for new execution
         }
     }
 
     /**
      * Called every cycle from the simulator.
-     * Execution starts the cycle AFTER setEffectiveAddress is called.
+     * Handles state transitions: ISSUED -> WAITING_FOR_ADDRESS or EXECUTING
+     * Execution starts the cycle AFTER state becomes EXECUTING.
      */
     public void tick(IMemory memory) {
-        if (!busy || state != State.EXECUTING)
+        if (!busy)
+            return;
+
+        // Transition from ISSUED to next state after one cycle
+        if (state == State.ISSUED) {
+            if (addressReady) {
+                // Address already computed, go straight to EXECUTING
+                state = State.EXECUTING;
+                executionStarted = false;
+            } else {
+                // Still waiting for address
+                state = State.WAITING_FOR_ADDRESS;
+            }
+            return;
+        }
+
+        if (state != State.EXECUTING)
             return;
 
         // First tick after entering EXECUTING state just marks execution started
         if (!executionStarted) {
             executionStarted = true;
-            return;  // Don't decrement on the first cycle (issue cycle)
+            return;  // Don't decrement on the first cycle
         }
 
         remainingCycles--;
@@ -167,6 +191,7 @@ public class LoadBuffer {
         effectiveAddress = 0;
         remainingCycles = 0;
         executionStarted = false;
+        addressReady = false;
     }
 
     public String debugString() {
