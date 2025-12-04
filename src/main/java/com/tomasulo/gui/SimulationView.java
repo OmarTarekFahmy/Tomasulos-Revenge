@@ -79,7 +79,7 @@ public class SimulationView extends BorderPane {
         toggleViewBtn.setOnAction(e -> switchCenterView(toggleViewBtn.isSelected()));
 
         cycleLabel = new Label("Cycle: 0");
-        cycleLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
+        cycleLabel.getStyleClass().add("cycle-label");
 
         topBar.getChildren().addAll(loadBtn, stepBtn, runBtn, toggleViewBtn, cycleLabel);
         setTop(topBar);

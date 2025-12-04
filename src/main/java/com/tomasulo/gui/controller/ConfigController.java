@@ -57,6 +57,7 @@ public class ConfigController {
             simController.initSimulator(new ArrayList<>());
 
             Scene scene = new Scene(simView, 1200, 800);
+            scene.getStylesheets().add(getClass().getResource("/styles.css").toExternalForm());
             stage.setTitle("Tomasulo Simulator - Running");
             stage.setScene(scene);
 

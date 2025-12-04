@@ -37,7 +37,7 @@ public class ConfigView extends VBox {
         setSpacing(20);
 
         Label title = new Label("Configuration");
-        title.setStyle("-fx-font-size: 24px; -fx-font-weight: bold;");
+        title.getStyleClass().add("title-label");
 
         GridPane grid = new GridPane();
         grid.setHgap(10);
@@ -80,7 +80,7 @@ public class ConfigView extends VBox {
 
     private void addSection(GridPane grid, String title, int row) {
         Label label = new Label(title);
-        label.setStyle("-fx-font-weight: bold; -fx-underline: true;");
+        label.getStyleClass().add("section-label");
         grid.add(label, 0, row, 2, 1);
     }
 

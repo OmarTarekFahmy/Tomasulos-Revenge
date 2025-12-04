@@ -13,6 +13,7 @@ public class MainApp extends Application {
         ConfigController controller = new ConfigController(primaryStage);
         ConfigView configView = new ConfigView(controller);
         Scene scene = new Scene(configView, 600, 800);
+        scene.getStylesheets().add(getClass().getResource("/styles.css").toExternalForm());
         
         primaryStage.setTitle("Tomasulo Simulator - Configuration");
         primaryStage.setScene(scene);
