@@ -149,7 +149,7 @@ public class SimulationView extends BorderPane {
         TableColumn<CacheBlock, String> cacheDirtyCol = new TableColumn<>("Dirty");
         cacheDirtyCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().isDirty())));
         
-        cacheTable.getColumns().addAll(cacheTagCol, cacheDataCol, cacheDirtyCol);
+        cacheTable.getColumns().addAll(cacheTagCol, cacheDirtyCol, cacheDataCol);
         cacheTable.setPlaceholder(new Label("Cache Empty / Invalid"));
 
         rightPane.getChildren().addAll(new Label("Register File"), registerTable, createSetRegisterButton(), new Label("Cache Content"), cacheTable);
