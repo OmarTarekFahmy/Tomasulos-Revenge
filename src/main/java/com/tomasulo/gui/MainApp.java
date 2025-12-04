@@ -1,5 +1,7 @@
 package com.tomasulo.gui;
 
+import com.tomasulo.gui.controller.ConfigController;
+
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
@@ -8,7 +10,8 @@ public class MainApp extends Application {
 
     @Override
     public void start(Stage primaryStage) {
-        ConfigView configView = new ConfigView(primaryStage);
+        ConfigController controller = new ConfigController(primaryStage);
+        ConfigView configView = new ConfigView(controller);
         Scene scene = new Scene(configView, 600, 800);
         
         primaryStage.setTitle("Tomasulo Simulator - Configuration");

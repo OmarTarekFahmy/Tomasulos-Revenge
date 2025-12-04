@@ -1,20 +1,17 @@
 package com.tomasulo.gui;
 
-import com.tomasulo.core.TomasuloSimulator;
+import com.tomasulo.gui.controller.ConfigController;
 
 import javafx.geometry.Insets;
-import javafx.scene.Scene;
-import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
-import javafx.stage.Stage;
 
 public class ConfigView extends VBox {
 
-    private final Stage stage;
+    private final ConfigController controller;
 
     // Latencies final
     private final TextField intAluLatency = new TextField("1");
@@ -34,8 +31,8 @@ public class ConfigView extends VBox {
     private final TextField cacheHitLatency = new TextField("1");
     private final TextField cacheMissPenalty = new TextField("10");
 
-    public ConfigView(Stage stage) {
-        this.stage = stage;
+    public ConfigView(ConfigController controller) {
+        this.controller = controller;
         setPadding(new Insets(20));
         setSpacing(20);
 
@@ -72,7 +69,11 @@ public class ConfigView extends VBox {
 
         Button startButton = new Button("Start Simulation");
         startButton.setMaxWidth(Double.MAX_VALUE);
-        startButton.setOnAction(e -> startSimulation());
+        startButton.setOnAction(e -> controller.startSimulation(
+            intAluLatency, fpAddSubLatency, fpMulLatency, fpDivLatency,
+            numIntRs, numFpAddRs, numFpMulRs, numLoadBuffers, numStoreBuffers,
+            cacheSize, blockSize, cacheHitLatency, cacheMissPenalty
+        ));
 
         getChildren().addAll(title, grid, startButton);
     }
@@ -87,35 +88,5 @@ public class ConfigView extends VBox {
         grid.add(new Label(label), 0, row);
         grid.add(field, 1, row);
     }
-
-    private void startSimulation() {
-        try {
-            TomasuloSimulator.Config config = new TomasuloSimulator.Config();
-            
-            config.intAluLatency = Integer.parseInt(intAluLatency.getText());
-            config.fpAddSubLatency = Integer.parseInt(fpAddSubLatency.getText());
-            config.fpMulLatency = Integer.parseInt(fpMulLatency.getText());
-            config.fpDivLatency = Integer.parseInt(fpDivLatency.getText());
-
-            config.numIntRs = Integer.parseInt(numIntRs.getText());
-            config.numFpAddSubRs = Integer.parseInt(numFpAddRs.getText());
-            config.numFpMulDivRs = Integer.parseInt(numFpMulRs.getText());
-            config.numLoadBuffers = Integer.parseInt(numLoadBuffers.getText());
-            config.numStoreBuffers = Integer.parseInt(numStoreBuffers.getText());
-
-            config.cacheSize = Integer.parseInt(cacheSize.getText());
-            config.blockSize = Integer.parseInt(blockSize.getText());
-            config.cacheHitLatency = Integer.parseInt(cacheHitLatency.getText());
-            config.cacheMissPenalty = Integer.parseInt(cacheMissPenalty.getText());
-
-            SimulationView simView = new SimulationView(stage, config);
-            Scene scene = new Scene(simView, 1200, 800);
-            stage.setTitle("Tomasulo Simulator - Running");
-            stage.setScene(scene);
-
-        } catch (NumberFormatException e) {
-            Alert alert = new Alert(Alert.AlertType.ERROR, "Please enter valid integers for all fields.");
-            alert.showAndWait();
-        }
-    }
 }
+

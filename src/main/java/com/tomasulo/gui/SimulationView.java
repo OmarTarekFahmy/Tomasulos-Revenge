@@ -1,7 +1,5 @@
 package com.tomasulo.gui;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -13,7 +11,7 @@ import com.tomasulo.core.RegisterFile;
 import com.tomasulo.core.ReservationStation;
 import com.tomasulo.core.StoreBuffer;
 import com.tomasulo.core.TomasuloSimulator;
-import com.tomasulo.parser.InstructionParser;
+import com.tomasulo.gui.controller.SimulationController;
 
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -29,14 +27,10 @@ import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
-import javafx.stage.FileChooser;
-import javafx.stage.Stage;
 
 public class SimulationView extends BorderPane {
 
-    private final Stage stage;
-    private final TomasuloSimulator.Config config;
-    private TomasuloSimulator simulator;
+    private final SimulationController controller;
 
     private Label cycleLabel;
     private TextArea logArea;
@@ -53,10 +47,8 @@ public class SimulationView extends BorderPane {
     private TableView<Instruction> instructionQueueTable;
 
 
-    public SimulationView(Stage stage, TomasuloSimulator.Config config) {
-        this.stage = stage;
-        this.config = config;
-
+    public SimulationView(SimulationController controller) {
+        this.controller = controller;
         setupUI();
     }
 
@@ -66,16 +58,16 @@ public class SimulationView extends BorderPane {
         topBar.setPadding(new Insets(10));
         
         Button loadBtn = new Button("Load Program File");
-        loadBtn.setOnAction(e -> loadProgramFile());
+        loadBtn.setOnAction(e -> controller.loadProgramFile());
 
         Button loadTextBtn = new Button("Load from Text Area");
-        loadTextBtn.setOnAction(e -> loadProgramText());
+        loadTextBtn.setOnAction(e -> controller.loadProgramText(programInput.getText()));
 
         Button stepBtn = new Button("Step");
-        stepBtn.setOnAction(e -> step());
+        stepBtn.setOnAction(e -> controller.step());
 
         Button runBtn = new Button("Run All");
-        runBtn.setOnAction(e -> runAll());
+        runBtn.setOnAction(e -> controller.runAll());
 
         cycleLabel = new Label("Cycle: 0");
         cycleLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
@@ -176,18 +168,7 @@ public class SimulationView extends BorderPane {
                     try {
                         String regName = parts[0];
                         double val = Double.parseDouble(parts[1]);
-                        int regIdx = -1;
-                        if (regName.startsWith("R")) {
-                            regIdx = Integer.parseInt(regName.substring(1));
-                        } else if (regName.startsWith("F")) {
-                            regIdx = Integer.parseInt(regName.substring(1)) + 32;
-                        }
-                        
-                        if (regIdx >= 0 && regIdx < 64 && simulator != null) {
-                            simulator.getRegisterFile().get(regIdx).setValue(val);
-                            updateView();
-                            log("Set " + regName + " to " + val);
-                        }
+                        controller.setRegister(regName, val);
                     } catch (Exception ex) {
                         log("Invalid input for register set.");
                     }
@@ -262,64 +243,8 @@ public class SimulationView extends BorderPane {
         return table;
     }
 
-    private void loadProgramFile() {
-        FileChooser fileChooser = new FileChooser();
-        File file = fileChooser.showOpenDialog(stage);
-        if (file != null) {
-                InstructionParser parser = new InstructionParser();
-                List<Instruction> instructions = parser.parseFile(file.getAbsolutePath());
-                initSimulator(instructions);
-        }
-    }
-
-    private void loadProgramText() {
-        String text = programInput.getText();
-        if (text.isEmpty()) return;
-        
-        // Need to save to temp file or modify parser to read string.
-        // For now, let's assume we can parse lines.
-        // Since InstructionParser takes a filename, I'll write to a temp file.
-        try {
-            File temp = File.createTempFile("tomasulo_prog", ".txt");
-            java.nio.file.Files.write(temp.toPath(), text.getBytes());
-            InstructionParser parser = new InstructionParser();
-            List<Instruction> instructions = parser.parseFile(temp.getAbsolutePath());
-            initSimulator(instructions);
-            temp.deleteOnExit();
-        } catch (IOException e) {
-            log("Error parsing text: " + e.getMessage());
-        }
-    }
-
-    private void initSimulator(List<Instruction> instructions) {
-        simulator = new TomasuloSimulator(instructions, config);
-        updateView();
-        log("Program loaded. " + instructions.size() + " instructions.");
-    }
-
-    private void step() {
-        if (simulator == null) return;
-        if (!simulator.isFinished()) {
-            simulator.step();
-            updateView();
-            log("Cycle " + simulator.getCycle() + " executed.");
-            String cdb = simulator.getCdbStatus();
-            if (!cdb.isEmpty()) log("[CDB] " + cdb);
-        } else {
-            log("Simulation Finished.");
-        }
-    }
-
-    private void runAll() {
-        if (simulator == null) return;
-        while (!simulator.isFinished()) {
-            simulator.step();
-        }
-        updateView();
-        log("Run complete. Total Cycles: " + simulator.getCycle());
-    }
-
-    private void updateView() {
+    public void updateView() {
+        TomasuloSimulator simulator = controller.getSimulator();
         if (simulator == null) return;
 
         cycleLabel.setText("Cycle: " + simulator.getCycle());
@@ -329,14 +254,6 @@ public class SimulationView extends BorderPane {
         intTable.setItems(FXCollections.observableArrayList(simulator.getIntStations()));
         loadTable.setItems(FXCollections.observableArrayList(simulator.getLoadBuffers()));
         storeTable.setItems(FXCollections.observableArrayList(simulator.getStoreBuffers()));
-        
-        // Instruction Queue - need to access internal queue or just show what's left?
-        // Simulator has getInstructionQueue() which returns InstructionQueue object.
-        // InstructionQueue has peek(), but not a list.
-        // I should add a toList() to InstructionQueue or similar.
-        // For now, I'll skip or try to reflect.
-        // Actually, let's just show the original list for now or leave empty if hard.
-        // Better: Add getInstructions() to InstructionQueue.
         
         // Registers
         List<RegisterWrapper> regWrappers = new ArrayList<>();
@@ -362,8 +279,7 @@ public class SimulationView extends BorderPane {
         instructionQueueTable.setItems(FXCollections.observableArrayList(simulator.getInstructionQueue().toList()));
     }
 
-
-    private void log(String msg) {
+    public void log(String msg) {
         logArea.appendText(msg + "\n");
     }
 
