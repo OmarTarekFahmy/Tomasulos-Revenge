@@ -25,7 +25,12 @@ public class InstructionQueue {
     public boolean isEmpty() {
         return queue.isEmpty();
     }
-     public int size() {
+    public int size() {
         return queue.size();
     }
+
+    public java.util.List<Instruction> toList() {
+        return new java.util.ArrayList<>(queue);
+    }
 }
+

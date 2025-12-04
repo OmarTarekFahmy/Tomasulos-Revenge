@@ -71,7 +71,13 @@ public class ReservationStation {
     public Instruction.Opcode getOpcode()     { return opcode; }
     public double getVj()         { return Vj; }
     public double getVk()         { return Vk; }
-    public int getImmediate()     { return instruction.getImmediate(); }
+    public Tag getQj()            { return Qj; }
+    public Tag getQk()            { return Qk; }
+    public boolean isBusy()       { return busy; }
+    public Instruction getInstruction() { return instruction; }
+    public int getImmediate()     { return instruction != null ? instruction.getImmediate() : 0; }
+
+
 
 
     /**

@@ -35,9 +35,18 @@ public class StoreBuffer {
         this.tag = initialTag;
     }
 
+    public double getValueToStore() {
+        return valueToStore;
+    }
+
+    public Tag getSourceTag() {
+        return sourceTag;
+    }
+
     public boolean isBusy() {
         return busy;
     }
+
 
     public Tag getTag() {
         return tag;

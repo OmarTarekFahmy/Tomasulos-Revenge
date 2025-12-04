@@ -1,9 +1,9 @@
 package com.tomasulo.core;
 
-import com.tomasulo.core.Instruction.Opcode;
-
 import java.util.ArrayList;
 import java.util.List;
+
+import com.tomasulo.core.Instruction.Opcode;
 
 /**
  * Tomasulo Algorithm Simulator
@@ -196,39 +196,47 @@ public class TomasuloSimulator {
     // --- main simulation loop ---
 
     public void run(int maxCycles) {
-        while (cycle < maxCycles && (!iq.isEmpty() || anyBusy())) {
-            cycle++;
-            System.out.println("\n========== CYCLE " + cycle + " ==========");
-
-            // 0) Tick all RS to advance from ISSUED -> WAITING_FOR_OPERANDS
-            tickReservationStations();
-
-            // 1) Execute FUs + memory and collect finished results
-            List<CdbMessage> readyMessages = new ArrayList<>();
-            tickFunctionalUnits(readyMessages);
-            tickLoadsStores(readyMessages);
-
-            // 2) Broadcast at most one result on CDB (simple policy)
-            if (!readyMessages.isEmpty()) {
-                CdbMessage chosen = chooseMessageForCdb(readyMessages);
-                System.out.println("[CDB] Broadcasting " + chosen);
-                broadcastOnCdb(chosen);
-                // free the producer structures
-                handleProducerFree(chosen.tag());
-            }
-
-            // 3) Wake up RS (already done via CDB) and dispatch RS -> FU
-            dispatchReadyRsToFus();
-
-            // 4) Issue from IQ
-            issueFromQueue();
-
-            // 5) Debug prints
-            printState();
+        while (cycle < maxCycles && !isFinished()) {
+            step();
         }
 
         System.out.println("\nSimulation finished at cycle " + cycle);
         printFinalRegisters();
+    }
+
+    public boolean isFinished() {
+        return iq.isEmpty() && !anyBusy();
+    }
+
+    public void step() {
+        cycle++;
+        System.out.println("\n========== CYCLE " + cycle + " ==========");
+
+        // 0) Tick all RS to advance from ISSUED -> WAITING_FOR_OPERANDS
+        tickReservationStations();
+
+        // 1) Execute FUs + memory and collect finished results
+        List<CdbMessage> readyMessages = new ArrayList<>();
+        tickFunctionalUnits(readyMessages);
+        tickLoadsStores(readyMessages);
+
+        // 2) Broadcast at most one result on CDB (simple policy)
+        if (!readyMessages.isEmpty()) {
+            CdbMessage chosen = chooseMessageForCdb(readyMessages);
+            System.out.println("[CDB] Broadcasting " + chosen);
+            broadcastOnCdb(chosen);
+            // free the producer structures
+            handleProducerFree(chosen.tag());
+        }
+
+        // 3) Wake up RS (already done via CDB) and dispatch RS -> FU
+        dispatchReadyRsToFus();
+
+        // 4) Issue from IQ
+        issueFromQueue();
+
+        // 5) Debug prints
+        printState();
     }
 
     /**
@@ -293,9 +301,20 @@ public class TomasuloSimulator {
         }
     }
 
+    private String cdbStatus = "";
+
+    public String getCdbStatus() {
+        return cdbStatus;
+    }
+
     // --- 2) choose one message to broadcast ---
 
     private CdbMessage chooseMessageForCdb(List<CdbMessage> readyMessages) {
+        if (readyMessages.size() > 1) {
+            cdbStatus = "Conflict! " + readyMessages.size() + " instructions ready. Arbitrating: Selected " + readyMessages.get(0).tag() + " (First Come First Served)";
+        } else {
+            cdbStatus = "Broadcasting " + readyMessages.get(0).tag();
+        }
         // Simple heuristic:
         // 1) FP results
         // 2) Load results
@@ -598,10 +617,6 @@ public class TomasuloSimulator {
         return cache;
     }
 
-    public MainMemory getMainMemory() {
-        return mainMemory;
-    }
-
     public int getCycle() {
         return cycle;
     }
@@ -625,6 +640,15 @@ public class TomasuloSimulator {
     public List<StoreBuffer> getStoreBuffers() {
         return storeBuffers;
     }
+
+    public InstructionQueue getInstructionQueue() {
+        return iq;
+    }
+
+    public MainMemory getMainMemory() {
+        return mainMemory;
+    }
+
 
     /**
      * Set a register value (for initialization)

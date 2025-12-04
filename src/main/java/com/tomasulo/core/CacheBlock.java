@@ -49,6 +49,15 @@ public class CacheBlock {
         this.dirty = dirty;
     }
 
+    public String getDataHex() {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : data) {
+            sb.append(String.format("%02X ", b));
+        }
+        return sb.toString().trim();
+    }
+
+
     public int getTag() {
         return tag;
     }

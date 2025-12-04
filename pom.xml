@@ -43,8 +43,9 @@
                 <artifactId>javafx-maven-plugin</artifactId>
                 <version>0.0.8</version>
                 <configuration>
-                    <mainClass>com.tomasulo.gui.TestApp</mainClass>
+                    <mainClass>com.tomasulo.gui.MainApp</mainClass>
                 </configuration>
+
             </plugin>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>

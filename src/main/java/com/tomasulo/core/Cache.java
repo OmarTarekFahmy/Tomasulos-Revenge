@@ -405,4 +405,9 @@ public class Cache implements IMemory {
             }
         }
     }
+
+    public CacheBlock[] getBlocks() {
+        return blocks;
+    }
 }
+

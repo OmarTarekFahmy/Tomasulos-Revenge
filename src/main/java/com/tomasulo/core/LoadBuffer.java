@@ -62,6 +62,8 @@ public class LoadBuffer {
     }
 
     public long getSequenceNumber() {
+
+
         return sequenceNumber;
     }
 
