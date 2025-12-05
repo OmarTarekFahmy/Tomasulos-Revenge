@@ -78,6 +78,14 @@ public class BranchHandler {
     public Instruction getInstruction() {
         return instruction;
     }
+    
+    public Tag getQj() {
+        return Qj;
+    }
+    
+    public Tag getQk() {
+        return Qk;
+    }
 
     /**
      * Issue a BEQ or BNE branch instruction to this handler.

@@ -4,10 +4,10 @@ public class StoreBuffer {
 
     public enum State {
         FREE,
-        ISSUED,                // Just issued this cycle, will transition next cycle
-        WAITING_FOR_ADDRESS,   // Address not yet computed
-        WAITING_FOR_VALUE,     // Address ready, but waiting for source value via CDB
-        EXECUTING              // Both address and value ready, performing memory access
+        ISSUED, // Just issued this cycle, will transition next cycle
+        WAITING_FOR_ADDRESS, // Address not yet computed
+        WAITING_FOR_VALUE, // Address ready, but waiting for source value via CDB
+        EXECUTING // Both address and value ready, performing memory access
     }
 
     private final String name; // e.g. "S1"
@@ -23,12 +23,13 @@ public class StoreBuffer {
 
     private long effectiveAddress = 0;
     private double valueToStore = 0.0;
-    private Tag sourceTag = null;        // Tag we're waiting on for the value (Q)
-    private boolean valueReady = false;  // True when we have the value to store
+    private Tag sourceTag = null; // Tag we're waiting on for the value (Q)
+    private boolean valueReady = false; // True when we have the value to store
     private int remainingCycles = 0;
     private State state = State.FREE;
-    private boolean executionStarted = false;  // Track if execution has started
-    private boolean addressReady = false;      // True when effective address is computed
+    private boolean executionStarted = false; // Track if execution has started
+    private boolean addressReady = false; // True when effective address is computed
+    private boolean justReceivedOperand = false; // True if operand received from CDB this cycle
 
     public StoreBuffer(Tag initialTag, Cache cache) {
         this.name = initialTag.name();
@@ -52,7 +53,6 @@ public class StoreBuffer {
     public String toString() {
         return name;
     }
-
 
     public Tag getTag() {
         return tag;
@@ -87,10 +87,10 @@ public class StoreBuffer {
      * Latency is NOT determined here - it will be determined when execution starts
      * (when both address and value are ready) based on cache hit/miss.
      * 
-     * @param instr The store instruction
-     * @param regFile The register file
+     * @param instr       The store instruction
+     * @param regFile     The register file
      * @param producerTag Tag for this store operation
-     * @param seqNum Sequence number for ordering
+     * @param seqNum      Sequence number for ordering
      */
     public void issue(Instruction instr,
             RegisterFile regFile,
@@ -127,8 +127,8 @@ public class StoreBuffer {
         }
 
         this.addressReady = false;
-        this.state = State.ISSUED;  // Start in ISSUED state for one cycle
-        this.remainingCycles = 0;  // Will be set when execution starts
+        this.state = State.ISSUED; // Start in ISSUED state for one cycle
+        this.remainingCycles = 0; // Will be set when execution starts
     }
 
     public void setEffectiveAddress(long ea) {
@@ -140,23 +140,29 @@ public class StoreBuffer {
     /**
      * Update state based on whether address and value are ready.
      * When both are ready, transition to EXECUTING and determine cache latency.
-     * Note: This should NOT be called while in ISSUED state - wait for tick() to transition first.
+     * Note: This should NOT be called while in ISSUED state - wait for tick() to
+     * transition first.
+     * Note: This is called from onCdbBroadcast, so it doesn't have access to buffer
+     * lists.
+     * Memory ordering will be enforced in tick() instead.
      */
     private void updateState() {
         if (!busy || state == State.EXECUTING || state == State.FREE || state == State.ISSUED) {
             return;
         }
-        
-        if (addressReady && valueReady) {
+
+        // Don't transition to EXECUTING here - let tick() handle it with memory
+        // ordering checks
+        if (addressReady && valueReady && !justReceivedOperand) {
             // NOW we can determine cache hit/miss since we're ready to write
             int accessLatency = cache.getAccessLatency((int) effectiveAddress);
             this.remainingCycles = accessLatency;
-            this.executionStarted = false;  // Reset for new execution
+            this.executionStarted = false; // Reset for new execution
             state = State.EXECUTING;
-            
+
             // Log the cache access
             boolean isHit = cache.isHit((int) effectiveAddress);
-            System.out.println("[STORE] " + name + " starting execution at EA=" + effectiveAddress + 
+            System.out.println("[STORE] " + name + " starting execution at EA=" + effectiveAddress +
                     " (latency=" + accessLatency + (isHit ? " HIT" : " MISS") + ")");
         } else if (addressReady && !valueReady) {
             state = State.WAITING_FOR_VALUE;
@@ -170,21 +176,24 @@ public class StoreBuffer {
      * Execution starts the cycle AFTER state becomes EXECUTING.
      * When finished, the store actually writes to memory.
      */
-    public void tick(IMemory memory) {
+    public void tick(IMemory memory, java.util.List<LoadBuffer> loadBuffers, java.util.List<StoreBuffer> storeBuffers) {
         if (!busy)
             return;
 
+        // Clear the flag at the start of each cycle
+        justReceivedOperand = false;
+
         // Transition from ISSUED to next appropriate state after one cycle
         if (state == State.ISSUED) {
-            if (addressReady && valueReady) {
-                // Both ready, go straight to EXECUTING
+            if (addressReady && valueReady && AddressUnit.canStoreGoToMemory(this, loadBuffers, storeBuffers)) {
+                // Both ready and no memory ordering conflicts, go straight to EXECUTING
                 int accessLatency = cache.getAccessLatency((int) effectiveAddress);
                 this.remainingCycles = accessLatency;
                 this.executionStarted = false;
                 state = State.EXECUTING;
-                
+
                 boolean isHit = cache.isHit((int) effectiveAddress);
-                System.out.println("[STORE] " + name + " starting execution at EA=" + effectiveAddress + 
+                System.out.println("[STORE] " + name + " starting execution at EA=" + effectiveAddress +
                         " (latency=" + accessLatency + (isHit ? " HIT" : " MISS") + ")");
             } else if (addressReady && !valueReady) {
                 // Address ready but waiting for value
@@ -194,6 +203,22 @@ public class StoreBuffer {
                 state = State.WAITING_FOR_ADDRESS;
             }
             return;
+        }
+
+        // If in WAITING_FOR_ADDRESS or WAITING_FOR_VALUE, check if we can now
+        // transition to EXECUTING
+        if ((state == State.WAITING_FOR_ADDRESS || state == State.WAITING_FOR_VALUE)
+                && addressReady && valueReady && !justReceivedOperand
+                && AddressUnit.canStoreGoToMemory(this, loadBuffers, storeBuffers)) {
+            // Both ready now and no memory ordering conflicts, transition to EXECUTING
+            int accessLatency = cache.getAccessLatency((int) effectiveAddress);
+            this.remainingCycles = accessLatency;
+            this.executionStarted = false;
+            state = State.EXECUTING;
+
+            boolean isHit = cache.isHit((int) effectiveAddress);
+            System.out.println("[STORE] " + name + " starting execution at EA=" + effectiveAddress +
+                    " (latency=" + accessLatency + (isHit ? " HIT" : " MISS") + ")");
         }
 
         if (state != State.EXECUTING)
@@ -226,6 +251,7 @@ public class StoreBuffer {
         valueReady = false;
         sourceTag = null;
         valueToStore = 0.0;
+        justReceivedOperand = false;
     }
 
     /**
@@ -235,12 +261,13 @@ public class StoreBuffer {
         if (!busy || sourceTag == null) {
             return;
         }
-        
+
         if (sourceTag.equals(producerTag)) {
             // Got the value we were waiting for
             valueToStore = value;
             valueReady = true;
             sourceTag = null;
+            justReceivedOperand = true; // Set flag to delay execution by one cycle
             updateState();
         }
     }
@@ -257,7 +284,8 @@ public class StoreBuffer {
      * Format register index as R# or F# depending on whether it's INT or FP
      */
     private String formatRegister(int regIndex) {
-        if (regIndex < 0) return "none";
+        if (regIndex < 0)
+            return "none";
         if (regIndex >= 32) {
             return "F" + (regIndex - 32);
         } else {

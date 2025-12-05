@@ -4,10 +4,10 @@ public class LoadBuffer {
 
     public enum State {
         FREE,
-        ISSUED,              // Just issued this cycle, will transition next cycle
-        WAITING_FOR_ADDRESS,  // Waiting for base register to compute EA
-        EXECUTING,            // Address ready, accessing memory
-        RESULT_READY          // Memory access complete, ready to broadcast on CDB
+        ISSUED, // Just issued this cycle, will transition next cycle
+        WAITING_FOR_ADDRESS, // Waiting for base register to compute EA
+        EXECUTING, // Address ready, accessing memory
+        RESULT_READY // Memory access complete, ready to broadcast on CDB
     }
 
     private final String name; // e.g. "L1" (for printing)
@@ -26,8 +26,8 @@ public class LoadBuffer {
     private long effectiveAddress = 0;
     private int remainingCycles = 0;
     private State state = State.FREE;
-    private boolean executionStarted = false;  // Track if execution has started
-    private boolean addressReady = false;      // Track if effective address is computed
+    private boolean executionStarted = false; // Track if execution has started
+    private boolean addressReady = false; // Track if effective address is computed
 
     public LoadBuffer(Tag initialTag, int memLatency) {
         this.name = initialTag.name(); // just for debug
@@ -70,7 +70,6 @@ public class LoadBuffer {
 
     public long getSequenceNumber() {
 
-
         return sequenceNumber;
     }
 
@@ -86,10 +85,11 @@ public class LoadBuffer {
 
     /**
      * Issue with specific access latency (based on cache hit/miss)
-     * @param instr The load instruction
-     * @param regFile The register file
-     * @param producerTag Tag for this load operation
-     * @param seqNum Sequence number for ordering
+     * 
+     * @param instr         The load instruction
+     * @param regFile       The register file
+     * @param producerTag   Tag for this load operation
+     * @param seqNum        Sequence number for ordering
      * @param accessLatency Latency in cycles (cache hit or miss penalty)
      */
     public void issue(Instruction instr,
@@ -105,8 +105,8 @@ public class LoadBuffer {
         this.baseRegIndex = instr.getBaseReg();
         this.offset = instr.getOffset();
 
-        this.state = State.ISSUED;  // Start in ISSUED state for one cycle
-        this.remainingCycles = accessLatency;  // Use provided latency
+        this.state = State.ISSUED; // Start in ISSUED state for one cycle
+        this.remainingCycles = accessLatency; // Use provided latency
         this.addressReady = false;
         this.executionStarted = false;
 
@@ -120,11 +120,8 @@ public class LoadBuffer {
     public void setEffectiveAddress(long ea) {
         this.effectiveAddress = ea;
         this.addressReady = true;
-        // If already past ISSUED state, transition to EXECUTING
-        if (state == State.WAITING_FOR_ADDRESS) {
-            state = State.EXECUTING;
-            executionStarted = false;  // Reset for new execution
-        }
+        // Don't transition to EXECUTING here - let tick() handle it with memory
+        // ordering checks
     }
 
     /**
@@ -132,21 +129,31 @@ public class LoadBuffer {
      * Handles state transitions: ISSUED -> WAITING_FOR_ADDRESS or EXECUTING
      * Execution starts the cycle AFTER state becomes EXECUTING.
      */
-    public void tick(IMemory memory) {
+    public void tick(IMemory memory, java.util.List<StoreBuffer> storeBuffers) {
         if (!busy)
             return;
 
         // Transition from ISSUED to next state after one cycle
         if (state == State.ISSUED) {
-            if (addressReady) {
-                // Address already computed, go straight to EXECUTING
+            if (addressReady && AddressUnit.canLoadGoToMemory(this, storeBuffers)) {
+                // Address computed and no memory ordering conflicts, go straight to EXECUTING
                 state = State.EXECUTING;
                 executionStarted = false;
+            } else if (addressReady) {
+                // Address ready but waiting for preceding stores
+                state = State.WAITING_FOR_ADDRESS; // Reuse this state for memory ordering wait
             } else {
                 // Still waiting for address
                 state = State.WAITING_FOR_ADDRESS;
             }
             return;
+        }
+
+        // If in WAITING_FOR_ADDRESS, check if we can now proceed to EXECUTING
+        if (state == State.WAITING_FOR_ADDRESS && addressReady && AddressUnit.canLoadGoToMemory(this, storeBuffers)) {
+            state = State.EXECUTING;
+            executionStarted = false;
+            // Fall through to execution logic below
         }
 
         if (state != State.EXECUTING)
@@ -210,7 +217,8 @@ public class LoadBuffer {
      * Format register index as R# or F# depending on whether it's INT or FP
      */
     private String formatRegister(int regIndex) {
-        if (regIndex < 0) return "none";
+        if (regIndex < 0)
+            return "none";
         if (regIndex >= 32) {
             return "F" + (regIndex - 32);
         } else {

@@ -4,11 +4,11 @@ public class ReservationStation {
 
     public enum State {
         FREE,
-        ISSUED,              // Just issued, will check operands next cycle
+        ISSUED, // Just issued, will check operands next cycle
         WAITING_FOR_OPERANDS,
         WAITING_FOR_FU,
         EXECUTING,
-        EXECUTED             // Execution finished, waiting for CDB
+        EXECUTED // Execution finished, waiting for CDB
     }
 
     // Type of RS - determines which FU pool it can use
@@ -18,8 +18,8 @@ public class ReservationStation {
         INT_ALU
     }
 
-    private final Tag tag;        // e.g. A1, M2...
-    private final Type type;      // What kind of operations this RS handles
+    private final Tag tag; // e.g. A1, M2...
+    private final Type type; // What kind of operations this RS handles
     private boolean busy;
     private State state = State.FREE;
 
@@ -30,6 +30,8 @@ public class ReservationStation {
     private double Vk;
     private Tag Qj = Tag.NONE;
     private Tag Qk = Tag.NONE;
+
+    private boolean justReceivedOperand = false; // True if received operand from CDB this cycle
 
     private int destRegIndex = -1; // -1 if no destination
 
@@ -68,17 +70,38 @@ public class ReservationStation {
     public boolean isResultReady() {
         return busy && state == State.EXECUTED;
     }
-    public Instruction.Opcode getOpcode()     { return opcode; }
-    public double getVj()         { return Vj; }
-    public double getVk()         { return Vk; }
-    public Tag getQj()            { return Qj; }
-    public Tag getQk()            { return Qk; }
-    public boolean isBusy()       { return busy; }
-    public Instruction getInstruction() { return instruction; }
-    public int getImmediate()     { return instruction != null ? instruction.getImmediate() : 0; }
 
+    public Instruction.Opcode getOpcode() {
+        return opcode;
+    }
 
+    public double getVj() {
+        return Vj;
+    }
 
+    public double getVk() {
+        return Vk;
+    }
+
+    public Tag getQj() {
+        return Qj;
+    }
+
+    public Tag getQk() {
+        return Qk;
+    }
+
+    public boolean isBusy() {
+        return busy;
+    }
+
+    public Instruction getInstruction() {
+        return instruction;
+    }
+
+    public int getImmediate() {
+        return instruction != null ? instruction.getImmediate() : 0;
+    }
 
     /**
      * Issue an instruction into this reservation station.
@@ -119,7 +142,8 @@ public class ReservationStation {
         }
 
         // Destination register gets Qi = our tag
-        // R0 (index 0) is hardwired to 0 and cannot be written to, so we don't set Qi for it.
+        // R0 (index 0) is hardwired to 0 and cannot be written to, so we don't set Qi
+        // for it.
         if (destRegIndex > 0) {
             regFile.get(destRegIndex).setQi(tag);
         }
@@ -130,37 +154,56 @@ public class ReservationStation {
 
     /**
      * Called each cycle to advance state from ISSUED to WAITING_FOR_OPERANDS
+     * and clear the justReceivedOperand flag
      */
     public void tick() {
         if (state == State.ISSUED) {
             state = State.WAITING_FOR_OPERANDS;
             updateReadyForFu();
         }
-    }
 
-    /**
-     * Called when CDB broadcasts a value; if we were waiting on that tag, capture it.
-     */
-    public void onCdbBroadcast(Tag producerTag, double value) {
-        if (Qj.equals(producerTag)) {
-            Qj = Tag.NONE;
-            Vj = value;
-        }
-        if (Qk.equals(producerTag)) {
-            Qk = Tag.NONE;
-            Vk = value;
-        }
-
-        if (state == State.WAITING_FOR_OPERANDS || state == State.ISSUED) {
+        // Clear the flag at the start of each cycle
+        // If operands were received last cycle, they can be used this cycle
+        if (justReceivedOperand && state == State.WAITING_FOR_OPERANDS) {
+            justReceivedOperand = false;
             updateReadyForFu();
         }
     }
 
     /**
+     * Called when CDB broadcasts a value; if we were waiting on that tag, capture
+     * it.
+     * Sets a flag to delay execution by one cycle.
+     */
+    public void onCdbBroadcast(Tag producerTag, double value) {
+        boolean receivedOperand = false;
+
+        if (Qj.equals(producerTag)) {
+            Qj = Tag.NONE;
+            Vj = value;
+            receivedOperand = true;
+        }
+        if (Qk.equals(producerTag)) {
+            Qk = Tag.NONE;
+            Vk = value;
+            receivedOperand = true;
+        }
+
+        // If we just received an operand, mark it and delay execution by one cycle
+        if (receivedOperand && (state == State.WAITING_FOR_OPERANDS || state == State.ISSUED)) {
+            justReceivedOperand = true;
+        }
+    }
+
+    /**
      * Internal helper: check if both operands are ready and move to WAITING_FOR_FU.
+     * Only transitions if we didn't just receive an operand this cycle (needs one
+     * cycle delay).
      */
     private void updateReadyForFu() {
-        if (Tag.NONE.equals(Qj) && Tag.NONE.equals(Qk) && state == State.WAITING_FOR_OPERANDS) {
+        if (Tag.NONE.equals(Qj) && Tag.NONE.equals(Qk) &&
+                state == State.WAITING_FOR_OPERANDS &&
+                !justReceivedOperand) {
             state = State.WAITING_FOR_FU;
         }
     }
@@ -176,7 +219,8 @@ public class ReservationStation {
 
     /**
      * Called by the FunctionalUnit when its latency is over.
-     * We do not compute the result here yet; we just mark that the result is ready for CDB.
+     * We do not compute the result here yet; we just mark that the result is ready
+     * for CDB.
      */
     public void onExecutionFinished() {
         if (state == State.EXECUTING) {
@@ -208,6 +252,7 @@ public class ReservationStation {
         destRegIndex = -1;
         Qj = Tag.NONE;
         Qk = Tag.NONE;
+        justReceivedOperand = false;
         // Vj/Vk can stay garbage
     }
 
@@ -221,7 +266,8 @@ public class ReservationStation {
      * Format register index as R# or F# depending on whether it's INT or FP
      */
     private String formatRegister(int regIndex) {
-        if (regIndex < 0) return "none";
+        if (regIndex < 0)
+            return "none";
         if (regIndex >= 32) {
             return "F" + (regIndex - 32);
         } else {

@@ -191,7 +191,7 @@ public class FunctionalUnit {
     public String debugString() {
         if (busy) {
             return String.format("FU[%s] busy, executing %s for %s, %d cycles remaining",
-                    type, current.getOpcode(), current.getTag(), remainingCycles);
+                    type, current.getOpcode(), current.getTag(), remainingCycles-1);
         } else {
             return String.format("FU[%s] idle", type);
         }

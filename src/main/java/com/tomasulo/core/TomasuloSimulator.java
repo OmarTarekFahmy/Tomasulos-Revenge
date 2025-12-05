@@ -19,11 +19,8 @@ public class TomasuloSimulator {
     private static final int FP_BASE = 32; // F0 == reg[32], F6 == reg[38], etc.
 
     // Configurable parameters (set via constructor)
-    private final int numIntAluUnits;
-    private final int numFpAddSubUnits;
-    private final int numFpMulDivUnits;
-    private final int numFpAddSubRs;   // Separate RS for FP ADD/SUB
-    private final int numFpMulDivRs;   // Separate RS for FP MUL/DIV
+    private final int numFpAddSubRs; // Separate RS for FP ADD/SUB
+    private final int numFpMulDivRs; // Separate RS for FP MUL/DIV
     private final int numIntRs;
     private final int numLoadBuffers;
     private final int numStoreBuffers;
@@ -50,9 +47,9 @@ public class TomasuloSimulator {
     private final Cache cache;
 
     // Separate reservation station pools
-    private final List<ReservationStation> fpAddSubStations = new ArrayList<>();  // For ADD.D, SUB.D
-    private final List<ReservationStation> fpMulDivStations = new ArrayList<>();  // For MUL.D, DIV.D
-    private final List<ReservationStation> intStations = new ArrayList<>();       // For INT ALU ops
+    private final List<ReservationStation> fpAddSubStations = new ArrayList<>(); // For ADD.D, SUB.D
+    private final List<ReservationStation> fpMulDivStations = new ArrayList<>(); // For MUL.D, DIV.D
+    private final List<ReservationStation> intStations = new ArrayList<>(); // For INT ALU ops
 
     private final List<FunctionalUnit> fpUnits = new ArrayList<>();
     private final List<FunctionalUnit> intUnits = new ArrayList<>();
@@ -62,16 +59,17 @@ public class TomasuloSimulator {
 
     // Branch handling
     private final List<BranchHandler> branchHandlers = new ArrayList<>();
-    private int programCounter = 0;  // Current PC (index into program)
-    private boolean branchPending = false;  // True if a branch is in-flight
+    private int programCounter = 0; // Current PC (index into program)
+    private boolean branchPending = false; // True if a branch is in-flight
 
     private final CommonDataBus cdb = new CommonDataBus();
+    private final List<AddressUnit> addressUnits = new ArrayList<>();
 
     private int cycle = 0;
-    private long nextTagId = 1;
     private long nextSeqNum = 0; // for load/store ordering
 
     private final List<String> cycleLog = new ArrayList<>();
+    private final List<CdbMessage> pendingCdbMessages = new ArrayList<>(); // Messages waiting for CDB
 
     public List<String> getCycleLog() {
         return new ArrayList<>(cycleLog);
@@ -89,28 +87,30 @@ public class TomasuloSimulator {
         public int numIntAluUnits = 1;
         public int numFpAddSubUnits = 1;
         public int numFpMulDivUnits = 1;
-        public int numFpAddSubRs = 3;    // RS for FP ADD/SUB
-        public int numFpMulDivRs = 3;    // RS for FP MUL/DIV
+        public int numFpAddSubRs = 3; // RS for FP ADD/SUB
+        public int numFpMulDivRs = 3; // RS for FP MUL/DIV
         public int numIntRs = 3;
         public int numLoadBuffers = 2;
         public int numStoreBuffers = 2;
         public int numBranchHandlers = 1; // Branch unit(s)
-        
+        public int numAddressUnits = 2; // Address calculation units
+
         // Functional unit latencies
         public int intAluLatency = 1;
         public int fpAddSubLatency = 3;
         public int fpMulLatency = 5;
         public int fpDivLatency = 12;
-        public int branchLatency = 1;     // Latency for branch evaluation
-        
+        public int branchLatency = 1; // Latency for branch evaluation
+        public int addressLatency = 1; // Latency for address calculation
+
         // Cache configuration
-        public int cacheSize = 1024;      // bytes
-        public int blockSize = 64;         // bytes
-        public int cacheHitLatency = 1;    // cycles
-        public int cacheMissPenalty = 10;  // additional cycles on miss
-        
+        public int cacheSize = 256; // bytes
+        public int blockSize = 8; // bytes
+        public int cacheHitLatency = 1; // cycles
+        public int cacheMissPenalty = 10; // additional cycles on miss
+
         // Memory size
-        public int memorySize = 65536;     // 64KB
+        public int memorySize = 65536; // 64KB
     }
 
     /**
@@ -118,32 +118,32 @@ public class TomasuloSimulator {
      */
     public TomasuloSimulator(List<Instruction> program, Config config) {
         this.program = program;
-        
+
         // Store configuration
-        this.numIntAluUnits = config.numIntAluUnits;
-        this.numFpAddSubUnits = config.numFpAddSubUnits;
-        this.numFpMulDivUnits = config.numFpMulDivUnits;
         this.numFpAddSubRs = config.numFpAddSubRs;
         this.numFpMulDivRs = config.numFpMulDivRs;
         this.numIntRs = config.numIntRs;
         this.numLoadBuffers = config.numLoadBuffers;
         this.numStoreBuffers = config.numStoreBuffers;
         this.numBranchHandlers = config.numBranchHandlers;
-        
+
         this.intAluLatency = config.intAluLatency;
         this.fpAddSubLatency = config.fpAddSubLatency;
         this.fpMulLatency = config.fpMulLatency;
         this.fpDivLatency = config.fpDivLatency;
-        
+
         this.cacheSize = config.cacheSize;
         this.blockSize = config.blockSize;
         this.cacheHitLatency = config.cacheHitLatency;
         this.cacheMissPenalty = config.cacheMissPenalty;
-        
+
         // Initialize memory hierarchy
         this.mainMemory = new MainMemory(config.memorySize);
+        mainMemory.storeDouble(0, 6.5);
+        mainMemory.storeDouble(8, 2.5);
+        mainMemory.storeDouble(24, 16);
         this.cache = new Cache(cacheSize, blockSize, cacheHitLatency, cacheMissPenalty, mainMemory);
-        
+
         // Load program into IQ
         for (Instruction instr : program) {
             iq.enqueue(instr);
@@ -184,15 +184,15 @@ public class TomasuloSimulator {
 
         // FUs - pass latency configuration
         // FP FUs: separate ADD/SUB and MUL/DIV
-        for (int i = 0; i < numFpAddSubUnits; i++) {
+        for (int i = 0; i < numFpAddSubRs; i++) {
             fpUnits.add(new FunctionalUnit(FunctionalUnit.Type.FP_ADD_SUB, fpAddSubLatency, fpAddSubLatency));
         }
-        for (int i = 0; i < numFpMulDivUnits; i++) {
+        for (int i = 0; i < numFpMulDivRs; i++) {
             fpUnits.add(new FunctionalUnit(FunctionalUnit.Type.FP_MUL_DIV, fpMulLatency, fpDivLatency));
         }
 
         // INT FUs
-        for (int i = 0; i < numIntAluUnits; i++) {
+        for (int i = 0; i < numIntRs; i++) {
             intUnits.add(new FunctionalUnit(FunctionalUnit.Type.INT_ALU, intAluLatency, intAluLatency));
         }
 
@@ -208,10 +208,11 @@ public class TomasuloSimulator {
         for (int i = 0; i < numBranchHandlers; i++) {
             branchHandlers.add(new BranchHandler(new Tag("B" + (i + 1))));
         }
-    }
 
-    private Tag nextTag() {
-        return new Tag("T" + (nextTagId++));
+        // Address units
+        for (int i = 0; i < numLoadBuffers + numStoreBuffers; i++) { // Default to 2 address units
+            addressUnits.add(new AddressUnit(0)); // 1 cycle latency
+        }
     }
 
     private long nextSeqNum() {
@@ -238,22 +239,37 @@ public class TomasuloSimulator {
         cycleLog.clear();
         log("\n========== CYCLE " + cycle + " ==========");
 
-        // 0) Tick all RS and branch handlers to advance state machines
+        // 0) Tick all RS, branch handlers, and address units to advance state machines
         tickReservationStations();
         tickBranchHandlers();
+        tickAddressUnits();
 
         // 1) Execute FUs + memory and collect finished results
         List<CdbMessage> readyMessages = new ArrayList<>();
+
+        // Add any pending messages from previous cycles first (they have priority)
+        readyMessages.addAll(pendingCdbMessages);
+        pendingCdbMessages.clear();
+
         tickFunctionalUnits(readyMessages);
         tickLoadsStores(readyMessages);
 
-        // 2) Broadcast at most one result on CDB (simple policy)
+        // 2) Broadcast at most one result on CDB (intelligent priority policy)
         if (!readyMessages.isEmpty()) {
             CdbMessage chosen = chooseMessageForCdb(readyMessages);
             log("[CDB] Broadcasting " + chosen);
             broadcastOnCdb(chosen);
             // free the producer structures
             handleProducerFree(chosen.tag());
+
+            // Save remaining messages for next cycle
+            readyMessages.remove(chosen);
+            pendingCdbMessages.addAll(readyMessages);
+
+            if (!readyMessages.isEmpty()) {
+                log("[CDB] " + readyMessages.size() + " message(s) deferred to next cycle: " +
+                        readyMessages.stream().map(m -> m.tag().toString()).reduce((a, b) -> a + ", " + b).orElse(""));
+            }
         }
 
         // 3) Evaluate branches that are ready
@@ -275,20 +291,24 @@ public class TomasuloSimulator {
     private void logComputingInstructions() {
         List<String> computing = new ArrayList<>();
         for (FunctionalUnit fu : fpUnits) {
-            if (!fu.isFree()) computing.add(fu.debugString());
+            if (!fu.isFree())
+                computing.add(fu.debugString());
         }
         for (FunctionalUnit fu : intUnits) {
-            if (!fu.isFree()) computing.add(fu.debugString());
+            if (!fu.isFree())
+                computing.add(fu.debugString());
         }
         for (LoadBuffer lb : loadBuffers) {
-            if (lb.isBusy() && lb.getState() == LoadBuffer.State.EXECUTING) computing.add("LoadBuffer " + lb.getTag() + " Executing");
+            if (lb.isBusy() && lb.getState() == LoadBuffer.State.EXECUTING)
+                computing.add("LoadBuffer " + lb.getTag() + " Executing");
         }
         for (StoreBuffer sb : storeBuffers) {
-            if (sb.isBusy() && sb.getState() == StoreBuffer.State.EXECUTING) computing.add("StoreBuffer " + sb.getTag() + " Executing");
+            if (sb.isBusy() && sb.getState() == StoreBuffer.State.EXECUTING)
+                computing.add("StoreBuffer " + sb.getTag() + " Executing");
         }
-        
+
         if (!computing.isEmpty()) {
-            log("[EXECUTING] " + String.join(", ", computing));
+            log("[EXECUTING] \n" + String.join(", ", computing));
         }
     }
 
@@ -318,6 +338,15 @@ public class TomasuloSimulator {
     }
 
     /**
+     * Tick all address units to advance address calculations
+     */
+    private void tickAddressUnits() {
+        for (AddressUnit au : addressUnits) {
+            au.tick();
+        }
+    }
+
+    /**
      * Evaluate branches that are ready and handle taken branches
      */
     private void evaluateBranches() {
@@ -325,16 +354,16 @@ public class TomasuloSimulator {
             if (bh.isReadyToEvaluate()) {
                 boolean taken = bh.evaluate();
                 Instruction instr = bh.getInstruction();
-                
-                log("[BRANCH] " + instr.getOpcode() + " evaluated: " + (taken ? "TAKEN" : "NOT TAKEN") + 
-                    ", nextPC=" + bh.getNextPC());
-                
+
+                log("[BRANCH] " + instr.getOpcode() + " evaluated: " + (taken ? "TAKEN" : "NOT TAKEN") +
+                        ", nextPC=" + bh.getNextPC());
+
                 if (taken) {
                     // Jump to target - reload instruction queue from target PC
                     int targetPC = bh.getNextPC();
                     reloadInstructionQueue(targetPC);
                 }
-                
+
                 // Free the branch handler
                 bh.free();
                 branchPending = false;
@@ -350,13 +379,13 @@ public class TomasuloSimulator {
         while (!iq.isEmpty()) {
             iq.dequeue();
         }
-        
+
         // Reload from target PC
         programCounter = targetPC;
         for (int i = targetPC; i < program.size(); i++) {
             iq.enqueue(program.get(i));
         }
-        
+
         log("[BRANCH] Reloaded IQ from PC=" + targetPC + ", " + iq.size() + " instructions remaining");
     }
 
@@ -393,7 +422,7 @@ public class TomasuloSimulator {
     private void tickLoadsStores(List<CdbMessage> readyMessages) {
         // Loads: may produce a CDB message
         for (LoadBuffer lb : loadBuffers) {
-            lb.tick(cache);
+            lb.tick(cache, storeBuffers); // Pass storeBuffers for memory ordering
             if (lb.isCdbReady()) {
                 CdbMessage msg = lb.produceCdbMessage(cache);
                 if (msg != null) {
@@ -403,7 +432,7 @@ public class TomasuloSimulator {
         }
         // Stores: just advance memory commit
         for (StoreBuffer sb : storeBuffers) {
-            sb.tick(cache);
+            sb.tick(cache, loadBuffers, storeBuffers); // Pass both lists for memory ordering
         }
     }
 
@@ -416,23 +445,220 @@ public class TomasuloSimulator {
     // --- 2) choose one message to broadcast ---
 
     private CdbMessage chooseMessageForCdb(List<CdbMessage> readyMessages) {
-        if (readyMessages.size() > 1) {
-            cdbStatus = "Conflict! " + readyMessages.size() + " instructions ready. Arbitrating: Selected " + readyMessages.get(0).tag() + " (First Come First Served)";
-        } else {
+        if (readyMessages.size() == 1) {
             cdbStatus = "Broadcasting " + readyMessages.get(0).tag();
+            return readyMessages.get(0);
         }
-        // Simple heuristic:
-        // 1) FP results
-        // 2) Load results
-        // 3) INT results
-        // (Here we don't distinguish types in msg, so just take the first)
-        return readyMessages.get(0);
+
+        // Multiple messages ready - use intelligent prioritization
+        // Priority 1: Count how many instructions are waiting for each tag
+        CdbMessage bestMsg = null;
+        int maxDependents = -1;
+        int maxReadyDependents = -1;
+        String arbitrationReason = "";
+
+        // Debug: log all candidates with their dependent counts
+        StringBuilder debugLog = new StringBuilder("[CDB PRIORITY] Candidates: ");
+        for (CdbMessage msg : readyMessages) {
+            int dependentCount = countDependents(msg.tag());
+            int readyDependentCount = countReadyDependents(msg.tag());
+            debugLog.append(msg.tag()).append("(").append(dependentCount).append(" deps, ")
+                    .append(readyDependentCount).append(" ready) ");
+
+            if (dependentCount > maxDependents) {
+                maxDependents = dependentCount;
+                maxReadyDependents = readyDependentCount;
+                bestMsg = msg;
+                arbitrationReason = "most dependents (" + dependentCount + ")";
+            } else if (dependentCount == maxDependents) {
+                // Tie-breaker: Choose the one with most dependents that can start immediately
+                if (readyDependentCount > maxReadyDependents) {
+                    maxReadyDependents = readyDependentCount;
+                    bestMsg = msg;
+                    arbitrationReason = "tie-break: most ready dependents (" + readyDependentCount + " of "
+                            + dependentCount + ")";
+                }
+                // If still tied, keep the first one (FCFS)
+            }
+        }
+        log(debugLog.toString());
+
+        // If no dependents for any, just take first (FCFS)
+        if (bestMsg == null) {
+            bestMsg = readyMessages.get(0);
+            arbitrationReason = "First Come First Served";
+        }
+
+        cdbStatus = "Conflict! " + readyMessages.size() + " instructions ready. Selected " +
+                bestMsg.tag() + " (" + arbitrationReason + ")";
+
+        return bestMsg;
+    }
+
+    /**
+     * Count how many dependents are ready to start execution immediately
+     * (only waiting for this one operand)
+     */
+    private int countReadyDependents(Tag tag) {
+        int count = 0;
+
+        // Check reservation stations that are waiting for ONLY this tag
+        for (ReservationStation rs : allRs()) {
+            if (rs.isBusy() && rs.getState() == ReservationStation.State.WAITING_FOR_OPERANDS) {
+                boolean waitingForThisTag = false;
+                boolean hasOtherDependency = false;
+
+                if (tag.equals(rs.getQj())) {
+                    waitingForThisTag = true;
+                }
+                if (tag.equals(rs.getQk())) {
+                    waitingForThisTag = true;
+                }
+
+                // Check if there are other dependencies
+                if (!tag.equals(rs.getQj()) && rs.getQj() != null && rs.getQj() != Tag.NONE) {
+                    hasOtherDependency = true;
+                }
+                if (!tag.equals(rs.getQk()) && rs.getQk() != null && rs.getQk() != Tag.NONE) {
+                    hasOtherDependency = true;
+                }
+
+                // Count if waiting for this tag and has no other dependencies
+                if (waitingForThisTag && !hasOtherDependency) {
+                    count++;
+                }
+            }
+        }
+
+        // Check store buffers that are waiting for ONLY this value
+        for (StoreBuffer sb : storeBuffers) {
+            if (sb.isBusy() && tag.equals(sb.getSourceTag())) {
+                // Check if address is ready (no other dependency)
+                if (sb.getState() == StoreBuffer.State.WAITING_FOR_VALUE) {
+                    count++;
+                }
+            }
+        }
+
+        // Check branch handlers waiting for ONLY this tag
+        for (BranchHandler bh : branchHandlers) {
+            if (bh.isBusy() && bh.getState() == BranchHandler.State.WAITING_FOR_OPERANDS) {
+                boolean waitingForThisTag = false;
+                boolean hasOtherDependency = false;
+
+                if (tag.equals(bh.getQj())) {
+                    waitingForThisTag = true;
+                }
+                if (tag.equals(bh.getQk())) {
+                    waitingForThisTag = true;
+                }
+
+                // Check if there are other dependencies
+                if (!tag.equals(bh.getQj()) && bh.getQj() != null && bh.getQj() != Tag.NONE) {
+                    hasOtherDependency = true;
+                }
+                if (!tag.equals(bh.getQk()) && bh.getQk() != null && bh.getQk() != Tag.NONE) {
+                    hasOtherDependency = true;
+                }
+
+                // Count if waiting for this tag and has no other dependencies
+                if (waitingForThisTag && !hasOtherDependency) {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    /**
+     * Count how many instructions are waiting for this tag
+     */
+    private int countDependents(Tag tag) {
+        int count = 0;
+
+        StringBuilder debugInfo = new StringBuilder("[COUNT_DEPS for " + tag + "] ");
+
+        // Check all reservation stations
+        for (ReservationStation rs : allRs()) {
+            if (rs.isBusy()) {
+                if (tag.equals(rs.getQj())) {
+                    count++;
+                    debugInfo.append(rs.getTag()).append(".Qj ");
+                }
+                if (tag.equals(rs.getQk())) {
+                    count++;
+                    debugInfo.append(rs.getTag()).append(".Qk ");
+                }
+            }
+        }
+
+        // Check load buffers - currently EA is computed at issue, so no base
+        // dependencies
+        // but checking state for waiting on address in case of future refactoring
+        for (LoadBuffer lb : loadBuffers) {
+            if (lb.isBusy() && lb.getState() == LoadBuffer.State.WAITING_FOR_ADDRESS) {
+                // If base register has a dependency on this tag, count it
+                int baseReg = lb.getBaseRegIndex();
+                if (baseReg >= 0) {
+                    Register baseRegister = registerFile.get(baseReg);
+                    if (tag.equals(baseRegister.getQi())) {
+                        count++;
+                        debugInfo.append(lb.getTag()).append(".base ");
+                    }
+                }
+            }
+        }
+
+        // Check store buffers waiting for value or address
+        for (StoreBuffer sb : storeBuffers) {
+            if (sb.isBusy()) {
+                // Check if waiting for source value
+                if (tag.equals(sb.getSourceTag())) {
+                    count++;
+                    debugInfo.append(sb.getTag()).append(".src ");
+                }
+                // Check if waiting for base address calculation
+                if (sb.getState() == StoreBuffer.State.WAITING_FOR_ADDRESS) {
+                    int baseReg = sb.getBaseRegIndex();
+                    if (baseReg >= 0) {
+                        Register baseRegister = registerFile.get(baseReg);
+                        if (tag.equals(baseRegister.getQi())) {
+                            count++;
+                            debugInfo.append(sb.getTag()).append(".base ");
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check branch handlers
+        for (BranchHandler bh : branchHandlers) {
+            if (bh.isBusy()) {
+                if (tag.equals(bh.getQj())) {
+                    count++;
+                    debugInfo.append(bh.getTag()).append(".Qj ");
+                }
+                if (tag.equals(bh.getQk())) {
+                    count++;
+                    debugInfo.append(bh.getTag()).append(".Qk ");
+                }
+            }
+        }
+
+        if (count > 0) {
+            debugInfo.append("= ").append(count).append(" dependents");
+            System.out.println(debugInfo.toString());
+        }
+
+        return count;
     }
 
     private void broadcastOnCdb(CdbMessage msg) {
-        // write value into RF and wake all RS / store buffers / branch handlers waiting on this tag
+        // write value into RF and wake all RS / store buffers / branch handlers waiting
+        // on this tag
         cdb.broadcastOne(msg, allRs(), loadBuffers, storeBuffers, registerFile);
-        
+
         // Also broadcast to branch handlers
         for (BranchHandler bh : branchHandlers) {
             bh.onCdbBroadcast(msg.tag(), msg.value());
@@ -476,6 +702,8 @@ public class TomasuloSimulator {
                     log("[DISPATCH] RS " + rs.getTag() +
                             " ( " + rs.getOpcode() + " ) -> FP ADD/SUB FU");
                     fu.start(rs);
+                    // Note: fu.start() marks the FU as busy, so it won't be selected again this
+                    // cycle
                 }
             }
         }
@@ -487,6 +715,8 @@ public class TomasuloSimulator {
                     log("[DISPATCH] RS " + rs.getTag() +
                             " ( " + rs.getOpcode() + " ) -> FP MUL/DIV FU");
                     fu.start(rs);
+                    // Note: fu.start() marks the FU as busy, so it won't be selected again this
+                    // cycle
                 }
             }
         }
@@ -498,6 +728,8 @@ public class TomasuloSimulator {
                     log("[DISPATCH] RS " + rs.getTag() +
                             " ( " + rs.getOpcode() + " ) -> INT FU");
                     fu.start(rs);
+                    // Note: fu.start() marks the FU as busy, so it won't be selected again this
+                    // cycle
                 }
             }
         }
@@ -528,22 +760,31 @@ public class TomasuloSimulator {
                 log("[ISSUE] Stall: no free LoadBuffer for " + op);
                 return;
             }
-            Tag tag = nextTag();
+
+            // Find free address unit
+            AddressUnit au = findFreeAddressUnit();
+            if (au == null) {
+                log("[ISSUE] Stall: no free AddressUnit for " + op);
+                return;
+            }
+
             long seq = nextSeqNum();
-            
-            // compute EA directly for now (base + offset)
+
+            // Determine latency based on cache hit/miss (estimate with base reg value)
             int base = instr.getBaseReg();
             int offset = instr.getOffset();
-            long ea = (long) registerFile.get(base).getIntValue() + offset;
-            
-            // Determine latency based on cache hit/miss
-            int accessLatency = cache.getAccessLatency((int) ea);
+            long estimatedEa = (long) registerFile.get(base).getIntValue() + offset;
+            int accessLatency = cache.getAccessLatency((int) estimatedEa);
+
             log("[ISSUE] " + op + " -> LoadBuffer " + lb.getTag() +
-                    " (tag=" + tag + ", seq=" + seq + ", latency=" + accessLatency + 
-                    (cache.isHit((int) ea) ? " HIT" : " MISS") + ")");
-            
-            lb.issue(instr, registerFile, tag, seq, accessLatency);
-            lb.setEffectiveAddress(ea);
+                    " (tag=" + lb.getTag() + ", seq=" + seq + ", latency=" + accessLatency +
+                    (cache.isHit((int) estimatedEa) ? " HIT" : " MISS") + ")");
+
+            lb.issue(instr, registerFile, lb.getTag(), seq, accessLatency);
+
+            // Start address calculation in address unit
+            au.startForLoad(lb, registerFile);
+
             iq.dequeue();
             programCounter++;
             return;
@@ -555,21 +796,26 @@ public class TomasuloSimulator {
                 log("[ISSUE] Stall: no free StoreBuffer for " + op);
                 return;
             }
-            Tag tag = nextTag();
+
+            // Find free address unit
+            AddressUnit au = findFreeAddressUnit();
+            if (au == null) {
+                log("[ISSUE] Stall: no free AddressUnit for " + op);
+                return;
+            }
+
             long seq = nextSeqNum();
-            
-            // compute EA directly for now (base + offset)
-            int base = instr.getBaseReg();
-            int offset = instr.getOffset();
-            long ea = (long) registerFile.get(base).getIntValue() + offset;
-            
+
             // Note: Cache hit/miss latency will be determined when execution starts
             // (when the value to store is ready)
             log("[ISSUE] " + op + " -> StoreBuffer " + sb.getTag() +
-                    " (tag=" + tag + ", seq=" + seq + ")");
-            
-            sb.issue(instr, registerFile, tag, seq);
-            sb.setEffectiveAddress(ea);
+                    " (tag=" + sb.getTag() + ", seq=" + seq + ")");
+
+            sb.issue(instr, registerFile, sb.getTag(), seq);
+
+            // Start address calculation in address unit
+            au.startForStore(sb, registerFile);
+
             iq.dequeue();
             programCounter++;
             return;
@@ -621,14 +867,14 @@ public class TomasuloSimulator {
                 log("[ISSUE] Stall: branch already pending for " + op);
                 return;
             }
-            
+
             // Find free branch handler
             BranchHandler bh = findFreeBranchHandler();
             if (bh == null) {
                 log("[ISSUE] Stall: no free BranchHandler for " + op);
                 return;
             }
-            
+
             log("[ISSUE] " + op + " -> BranchHandler " + bh.getTag() + " (PC=" + programCounter + ")");
             bh.issue(instr, registerFile, programCounter);
             branchPending = true;
@@ -671,6 +917,14 @@ public class TomasuloSimulator {
         for (ReservationStation rs : list) {
             if (rs.isFree())
                 return rs;
+        }
+        return null;
+    }
+
+    private AddressUnit findFreeAddressUnit() {
+        for (AddressUnit au : addressUnits) {
+            if (au.isFree())
+                return au;
         }
         return null;
     }
@@ -755,7 +1009,7 @@ public class TomasuloSimulator {
     private void printFinalRegisters() {
         System.out.println("\n=== FINAL REGISTER STATE ===");
         printState();
-        
+
         // Print cache statistics
         System.out.println("\n=== CACHE STATISTICS ===");
         cache.printStats();
@@ -815,12 +1069,12 @@ public class TomasuloSimulator {
         return mainMemory;
     }
 
-
     /**
      * Set a register value (for initialization)
      */
     public void setRegister(int regIndex, double value) {
-        if (regIndex == 0) return; // R0 is hardwired to 0
+        if (regIndex == 0)
+            return; // R0 is hardwired to 0
         registerFile.get(regIndex).setValue(value);
     }
 
@@ -828,7 +1082,8 @@ public class TomasuloSimulator {
      * Set an integer register value
      */
     public void setIntRegister(int regNum, int value) {
-        if (regNum == 0) return; // R0 is hardwired to 0
+        if (regNum == 0)
+            return; // R0 is hardwired to 0
         registerFile.get(r(regNum)).setValue(value);
     }
 
@@ -866,37 +1121,38 @@ public class TomasuloSimulator {
         config.numFpAddSubUnits = 1;
         config.numFpMulDivUnits = 1;
         config.numIntAluUnits = 1;
-        
+
         // Set latencies
         config.intAluLatency = 1;
         config.fpAddSubLatency = 3;
         config.fpMulLatency = 5;
         config.fpDivLatency = 12;
-        
+
         // Cache configuration
         config.cacheSize = 1024;
         config.blockSize = 64;
         config.cacheHitLatency = 1;
         config.cacheMissPenalty = 10;
-        
+
         System.out.println("===== Running Tomasulo Simulator =====");
         List<Instruction> program = com.tomasulo.parser.InstructionParser.parseFile("src/main/resources/test.txt");
         TomasuloSimulator sim = new TomasuloSimulator(program, config);
-        
+
         // Initialize registers and memory for testing
-        // For the loop program: R1 starts at 0, gets 24 added, decrements by 8 until R1==R2
+        // For the loop program: R1 starts at 0, gets 24 added, decrements by 8 until
+        // R1==R2
         // R2 starts at 0 (loop termination condition)
-        sim.setIntRegister(1, 0);    // R1 = 0 (will become 24 after DADDI)
-        sim.setIntRegister(2, 0);    // R2 = 0 (loop termination value)
-        
+        sim.setIntRegister(1, 0); // R1 = 0 (will become 24 after DADDI)
+        sim.setIntRegister(2, 0); // R2 = 0 (loop termination value)
+
         // Memory locations that will be accessed: 8(R1) where R1 = 24, 16, 8
         // So addresses: 32, 24, 16
-        sim.setMemoryDouble(32, 1.0);   // 8 + 24 = 32
-        sim.setMemoryDouble(24, 2.0);   // 8 + 16 = 24  
-        sim.setMemoryDouble(16, 3.0);   // 8 + 8 = 16
-        
-        sim.setFpRegister(2, 2.0);   // F2 = 2.0 (multiplier)
-        
+        sim.setMemoryDouble(32, 1.0); // 8 + 24 = 32
+        sim.setMemoryDouble(24, 2.0); // 8 + 16 = 24
+        sim.setMemoryDouble(16, 3.0); // 8 + 8 = 16
+
+        sim.setFpRegister(2, 2.0); // F2 = 2.0 (multiplier)
+
         sim.run(100);
     }
 }
