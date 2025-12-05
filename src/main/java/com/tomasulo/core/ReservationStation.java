@@ -124,8 +124,9 @@ public class ReservationStation {
             regFile.get(destRegIndex).setQi(tag);
         }
 
-        // Initial state: ISSUED - will transition to WAITING_FOR_OPERANDS next cycle
-        state = State.ISSUED;
+        // Initial state: Check for operands immediately
+        state = State.WAITING_FOR_OPERANDS;
+        updateReadyForFu();
     }
 
     /**

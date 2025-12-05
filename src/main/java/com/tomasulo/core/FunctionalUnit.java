@@ -190,6 +190,11 @@ public class FunctionalUnit {
      */
     public String debugString() {
         if (busy) {
+            int totalLatency = latencyFor(current.getOpcode());
+            if (remainingCycles == totalLatency) {
+                return String.format("FU[%s] busy, ready to execute %s for %s",
+                        type, current.getOpcode(), current.getTag());
+            }
             return String.format("FU[%s] busy, executing %s for %s, %d cycles remaining",
                     type, current.getOpcode(), current.getTag(), remainingCycles);
         } else {

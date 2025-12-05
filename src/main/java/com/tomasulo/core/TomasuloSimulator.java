@@ -218,6 +218,8 @@ public class TomasuloSimulator {
         return nextSeqNum++;
     }
 
+    private List<CdbMessage> cdbBuffer = new ArrayList<>();
+
     // --- main simulation loop ---
 
     public void run(int maxCycles) {
@@ -230,7 +232,7 @@ public class TomasuloSimulator {
     }
 
     public boolean isFinished() {
-        return iq.isEmpty() && !anyBusy() && !branchPending;
+        return iq.isEmpty() && !anyBusy() && !branchPending && cdbBuffer.isEmpty();
     }
 
     public void step() {
@@ -242,28 +244,35 @@ public class TomasuloSimulator {
         tickReservationStations();
         tickBranchHandlers();
 
-        // 1) Execute FUs + memory and collect finished results
-        List<CdbMessage> readyMessages = new ArrayList<>();
-        tickFunctionalUnits(readyMessages);
-        tickLoadsStores(readyMessages);
-
-        // 2) Broadcast at most one result on CDB (simple policy)
-        if (!readyMessages.isEmpty()) {
-            CdbMessage chosen = chooseMessageForCdb(readyMessages);
+        // 1) Broadcast at most one result on CDB (from PREVIOUS cycles)
+        if (!cdbBuffer.isEmpty()) {
+            CdbMessage chosen = chooseMessageForCdb(cdbBuffer);
             log("[CDB] Broadcasting " + chosen);
             broadcastOnCdb(chosen);
             // free the producer structures
             handleProducerFree(chosen.tag());
+            cdbBuffer.remove(chosen);
+        } else {
+            cdbStatus = "CDB Free";
+        }
+
+        // 2) Execute FUs + memory and collect NEW results
+        List<CdbMessage> newResults = new ArrayList<>();
+        tickFunctionalUnits(newResults);
+        tickLoadsStores(newResults);
+        
+        if (!newResults.isEmpty()) {
+            cdbBuffer.addAll(newResults);
         }
 
         // 3) Evaluate branches that are ready
         evaluateBranches();
 
-        // 4) Wake up RS (already done via CDB) and dispatch RS -> FU
-        dispatchReadyRsToFus();
-
-        // 5) Issue from IQ
+        // 4) Issue from IQ (Moved before dispatch to allow immediate execution if ready)
         issueFromQueue();
+
+        // 5) Wake up RS (already done via CDB) and dispatch RS -> FU
+        dispatchReadyRsToFus();
 
         // 6) Log currently computing instructions
         logComputingInstructions();
@@ -281,10 +290,31 @@ public class TomasuloSimulator {
             if (!fu.isFree()) computing.add(fu.debugString());
         }
         for (LoadBuffer lb : loadBuffers) {
-            if (lb.isBusy() && lb.getState() == LoadBuffer.State.EXECUTING) computing.add("LoadBuffer " + lb.getTag() + " Executing");
+            if (lb.isBusy() && lb.getState() == LoadBuffer.State.EXECUTING) {
+                if (lb.isExecutionStarted()) {
+                    computing.add("LoadBuffer " + lb.getTag() + " Executing");
+                } else {
+                    computing.add("LoadBuffer " + lb.getTag() + " ready to execute");
+                }
+            } else if (lb.isCdbReady()) {
+                computing.add("LoadBuffer " + lb.getTag() + " Waiting for CDB");
+            }
         }
         for (StoreBuffer sb : storeBuffers) {
-            if (sb.isBusy() && sb.getState() == StoreBuffer.State.EXECUTING) computing.add("StoreBuffer " + sb.getTag() + " Executing");
+            if (sb.isBusy() && sb.getState() == StoreBuffer.State.EXECUTING) {
+                if (sb.isExecutionStarted()) {
+                    computing.add("StoreBuffer " + sb.getTag() + " Executing");
+                } else {
+                    computing.add("StoreBuffer " + sb.getTag() + " ready to execute");
+                }
+            }
+        }
+        
+        // Also check for RS waiting for CDB
+        for (ReservationStation rs : allRs()) {
+            if (rs.isResultReady()) {
+                computing.add("RS " + rs.getTag() + " Waiting for CDB");
+            }
         }
         
         if (!computing.isEmpty()) {
@@ -528,7 +558,7 @@ public class TomasuloSimulator {
                 log("[ISSUE] Stall: no free LoadBuffer for " + op);
                 return;
             }
-            Tag tag = nextTag();
+            Tag tag = new Tag(lb.toString());
             long seq = nextSeqNum();
             
             // compute EA directly for now (base + offset)
@@ -538,7 +568,7 @@ public class TomasuloSimulator {
             
             // Determine latency based on cache hit/miss
             int accessLatency = cache.getAccessLatency((int) ea);
-            log("[ISSUE] " + op + " -> LoadBuffer " + lb.getTag() +
+            log("[ISSUE] " + op + " -> LoadBuffer " + lb.toString() +
                     " (tag=" + tag + ", seq=" + seq + ", latency=" + accessLatency + 
                     (cache.isHit((int) ea) ? " HIT" : " MISS") + ")");
             
@@ -555,7 +585,7 @@ public class TomasuloSimulator {
                 log("[ISSUE] Stall: no free StoreBuffer for " + op);
                 return;
             }
-            Tag tag = nextTag();
+            Tag tag = new Tag(sb.toString());
             long seq = nextSeqNum();
             
             // compute EA directly for now (base + offset)
@@ -565,7 +595,7 @@ public class TomasuloSimulator {
             
             // Note: Cache hit/miss latency will be determined when execution starts
             // (when the value to store is ready)
-            log("[ISSUE] " + op + " -> StoreBuffer " + sb.getTag() +
+            log("[ISSUE] " + op + " -> StoreBuffer " + sb.toString() +
                     " (tag=" + tag + ", seq=" + seq + ")");
             
             sb.issue(instr, registerFile, tag, seq);

@@ -74,6 +74,10 @@ public class StoreBuffer {
         return (int) effectiveAddress;
     }
 
+    public boolean isExecutionStarted() {
+        return executionStarted;
+    }
+
     public State getState() {
         return state;
     }
@@ -143,7 +147,7 @@ public class StoreBuffer {
      * Note: This should NOT be called while in ISSUED state - wait for tick() to transition first.
      */
     private void updateState() {
-        if (!busy || state == State.EXECUTING || state == State.FREE || state == State.ISSUED) {
+        if (!busy || state == State.EXECUTING || state == State.FREE) {
             return;
         }
         

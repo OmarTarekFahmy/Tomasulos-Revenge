@@ -51,6 +51,10 @@ public class LoadBuffer {
         return (int) effectiveAddress;
     }
 
+    public boolean isExecutionStarted() {
+        return executionStarted;
+    }
+
     public State getState() {
         return state;
     }
@@ -120,8 +124,8 @@ public class LoadBuffer {
     public void setEffectiveAddress(long ea) {
         this.effectiveAddress = ea;
         this.addressReady = true;
-        // If already past ISSUED state, transition to EXECUTING
-        if (state == State.WAITING_FOR_ADDRESS) {
+        // If already past ISSUED state or currently ISSUED, transition to EXECUTING
+        if (state == State.WAITING_FOR_ADDRESS || state == State.ISSUED) {
             state = State.EXECUTING;
             executionStarted = false;  // Reset for new execution
         }
