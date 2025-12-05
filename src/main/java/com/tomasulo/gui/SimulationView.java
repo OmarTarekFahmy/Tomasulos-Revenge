@@ -24,6 +24,7 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
@@ -136,11 +137,17 @@ public class SimulationView extends BorderPane {
         rightPane.setPrefWidth(300);
 
         registerTable = new TableView<>();
+        registerTable.setEditable(true);
         registerTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         TableColumn<RegisterWrapper, String> regNameCol = new TableColumn<>("Reg");
         regNameCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().name));
         TableColumn<RegisterWrapper, String> regValCol = new TableColumn<>("Value");
         regValCol.setCellValueFactory(c -> new SimpleStringProperty(String.format("%.2f", c.getValue().register.getValue())));
+        regValCol.setCellFactory(TextFieldTableCell.forTableColumn());
+        regValCol.setOnEditCommit(t -> {
+            RegisterWrapper wrapper = t.getRowValue();
+            controller.setRegister(wrapper.name, t.getNewValue());
+        });
         TableColumn<RegisterWrapper, String> regQiCol = new TableColumn<>("Qi");
         regQiCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().register.getQi().toString()));
         
@@ -183,7 +190,7 @@ public class SimulationView extends BorderPane {
         cacheBox = new VBox(5);
         cacheBox.getChildren().addAll(new Label("Cache Content"), cacheTable, setCacheBtn);
 
-        rightPane.getChildren().addAll(new Label("Register File"), registerTable, createSetRegisterButton(), loadRegBtn);
+        rightPane.getChildren().addAll(new Label("Register File"), registerTable, loadRegBtn);
         VBox.setVgrow(registerTable, Priority.ALWAYS);
         setRight(rightPane);
 
@@ -265,26 +272,6 @@ public class SimulationView extends BorderPane {
         box.getChildren().addAll(new Label(title), table);
         return box;
     }
-
-    private Button createSetRegisterButton() {
-        Button btn = new Button("Set Register Value");
-        btn.setMaxWidth(Double.MAX_VALUE);
-        btn.setOnAction(e -> {
-            TextInputDialog dialog = new TextInputDialog("R0 100");
-            dialog.setTitle("Set Register");
-            dialog.setHeaderText("Enter Register and Value (e.g., R1 50 or F2 3.14)");
-            dialog.showAndWait().ifPresent(result -> {
-                String[] parts = result.trim().split("\\s+");
-                if (parts.length == 2) {
-                    controller.setRegister(parts[0], parts[1]);
-                } else {
-                    log("Invalid format. Use: REG VALUE");
-                }
-            });
-        });
-        return btn;
-    }
-
 
     private TableView<ReservationStation> createRsTable(String title) {
         TableView<ReservationStation> table = new TableView<>();
