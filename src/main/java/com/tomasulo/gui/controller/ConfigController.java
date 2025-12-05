@@ -59,6 +59,7 @@ public class ConfigController {
             Scene scene = new Scene(simView, 1200, 800);
             stage.setTitle("Tomasulo Simulator - Running");
             stage.setScene(scene);
+            stage.setMaximized(true);
 
         } catch (NumberFormatException e) {
             Alert alert = new Alert(Alert.AlertType.ERROR, "Please enter valid integers for all fields.");

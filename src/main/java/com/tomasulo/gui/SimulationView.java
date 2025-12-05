@@ -28,6 +28,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 public class SimulationView extends BorderPane {
@@ -46,6 +47,7 @@ public class SimulationView extends BorderPane {
     private TableView<StoreBuffer> storeTable;
     private TableView<RegisterWrapper> registerTable;
     private TableView<CacheBlock> cacheTable;
+    private VBox cacheBox;
     private TableView<Instruction> instructionQueueTable;
 
     private TabPane tabPane;
@@ -76,6 +78,7 @@ public class SimulationView extends BorderPane {
         runBtn.setOnAction(e -> controller.runAll());
 
         javafx.scene.control.ToggleButton toggleViewBtn = new javafx.scene.control.ToggleButton("Show All Stations");
+        toggleViewBtn.setSelected(true);
         toggleViewBtn.setOnAction(e -> switchCenterView(toggleViewBtn.isSelected()));
 
         cycleLabel = new Label("Cycle: 0");
@@ -94,6 +97,7 @@ public class SimulationView extends BorderPane {
         programInput.setPrefHeight(200);
 
         instructionQueueTable = new TableView<>();
+        instructionQueueTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         TableColumn<Instruction, String> iqOpCol = new TableColumn<>("Opcode");
         iqOpCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getOpcode().toString()));
         TableColumn<Instruction, String> iqDestCol = new TableColumn<>("Dest");
@@ -132,6 +136,7 @@ public class SimulationView extends BorderPane {
         rightPane.setPrefWidth(300);
 
         registerTable = new TableView<>();
+        registerTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         TableColumn<RegisterWrapper, String> regNameCol = new TableColumn<>("Reg");
         regNameCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().name));
         TableColumn<RegisterWrapper, String> regValCol = new TableColumn<>("Value");
@@ -143,6 +148,7 @@ public class SimulationView extends BorderPane {
         
         // Cache Table
         cacheTable = new TableView<>();
+        cacheTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         TableColumn<CacheBlock, String> cacheTagCol = new TableColumn<>("Tag");
         cacheTagCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().getTag())));
         TableColumn<CacheBlock, String> cacheDataCol = new TableColumn<>("Data");
@@ -152,6 +158,7 @@ public class SimulationView extends BorderPane {
         
         cacheTable.getColumns().addAll(cacheTagCol, cacheDirtyCol, cacheDataCol);
         cacheTable.setPlaceholder(new Label("Cache Empty / Invalid"));
+        cacheTable.setPrefHeight(200);
 
         Button loadRegBtn = new Button("Load Register File");
         loadRegBtn.setMaxWidth(Double.MAX_VALUE);
@@ -173,7 +180,11 @@ public class SimulationView extends BorderPane {
             });
         });
 
-        rightPane.getChildren().addAll(new Label("Register File"), registerTable, createSetRegisterButton(), loadRegBtn, new Label("Cache Content"), cacheTable, setCacheBtn);
+        cacheBox = new VBox(5);
+        cacheBox.getChildren().addAll(new Label("Cache Content"), cacheTable, setCacheBtn);
+
+        rightPane.getChildren().addAll(new Label("Register File"), registerTable, createSetRegisterButton(), loadRegBtn);
+        VBox.setVgrow(registerTable, Priority.ALWAYS);
         setRight(rightPane);
 
 
@@ -182,6 +193,8 @@ public class SimulationView extends BorderPane {
         logArea.setEditable(false);
         logArea.setPrefHeight(150);
         setBottom(logArea);
+        
+        switchCenterView(true);
     }
 
     private void switchCenterView(boolean showAll) {
@@ -197,25 +210,38 @@ public class SimulationView extends BorderPane {
             grid.setVgap(10);
             grid.setPadding(new Insets(10));
             
-            // Row 0
-            grid.add(createTableBox("FP Add/Sub Stations", fpAddTable), 0, 0);
-            grid.add(createTableBox("FP Mul/Div Stations", fpMulTable), 1, 0);
+            // Row 0: FP Add/Sub and FP Mul/Div (Span 3 columns each in a 6-column grid)
+            VBox fpAddBox = createTableBox("FP Add/Sub Stations", fpAddTable);
+            grid.add(fpAddBox, 0, 0);
+            GridPane.setColumnSpan(fpAddBox, 3);
             
-            // Row 1
-            grid.add(createTableBox("Integer Stations", intTable), 0, 1);
-            grid.add(createTableBox("Load Buffers", loadTable), 1, 1);
+            VBox fpMulBox = createTableBox("FP Mul/Div Stations", fpMulTable);
+            grid.add(fpMulBox, 3, 0);
+            GridPane.setColumnSpan(fpMulBox, 3);
             
-            // Row 2
+            // Row 1: Integer, Store, Load (Span 2 columns each in a 6-column grid)
+            VBox intBox = createTableBox("Integer Stations", intTable);
+            grid.add(intBox, 0, 1);
+            GridPane.setColumnSpan(intBox, 2);
+            
             VBox storeBox = createTableBox("Store Buffers", storeTable);
-            grid.add(storeBox, 0, 2);
+            grid.add(storeBox, 2, 1);
             GridPane.setColumnSpan(storeBox, 2);
+
+            VBox loadBox = createTableBox("Load Buffers", loadTable);
+            grid.add(loadBox, 4, 1);
+            GridPane.setColumnSpan(loadBox, 2);
             
-            // Make columns grow
-            ColumnConstraints col1 = new ColumnConstraints();
-            col1.setPercentWidth(50);
-            ColumnConstraints col2 = new ColumnConstraints();
-            col2.setPercentWidth(50);
-            grid.getColumnConstraints().addAll(col1, col2);
+            // Row 2: Cache (Span all 6 columns)
+            grid.add(cacheBox, 0, 2);
+            GridPane.setColumnSpan(cacheBox, 6);
+            
+            // Make columns grow equally (16.66% each)
+            for (int i = 0; i < 6; i++) {
+                ColumnConstraints col = new ColumnConstraints();
+                col.setPercentWidth(100.0 / 6.0);
+                grid.getColumnConstraints().add(col);
+            }
             
             javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(grid);
             scroll.setFitToWidth(true);
@@ -228,7 +254,9 @@ public class SimulationView extends BorderPane {
             tabPane.getTabs().get(3).setContent(loadTable);
             tabPane.getTabs().get(4).setContent(storeTable);
             
-            centerPane.getChildren().add(tabPane);
+            VBox layout = new VBox(10);
+            layout.getChildren().addAll(tabPane, cacheBox);
+            centerPane.getChildren().add(layout);
         }
     }
 
@@ -260,6 +288,7 @@ public class SimulationView extends BorderPane {
 
     private TableView<ReservationStation> createRsTable(String title) {
         TableView<ReservationStation> table = new TableView<>();
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setFixedCellSize(25);
         table.prefHeightProperty().bind(Bindings.size(table.getItems()).multiply(table.getFixedCellSize()).add(30));
         table.minHeightProperty().bind(table.prefHeightProperty());
@@ -292,6 +321,7 @@ public class SimulationView extends BorderPane {
 
     private TableView<LoadBuffer> createLoadTable() {
         TableView<LoadBuffer> table = new TableView<>();
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setFixedCellSize(25);
         table.prefHeightProperty().bind(Bindings.size(table.getItems()).multiply(table.getFixedCellSize()).add(30));
         table.minHeightProperty().bind(table.prefHeightProperty());
@@ -312,6 +342,7 @@ public class SimulationView extends BorderPane {
 
     private TableView<StoreBuffer> createStoreTable() {
         TableView<StoreBuffer> table = new TableView<>();
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setFixedCellSize(25);
         table.prefHeightProperty().bind(Bindings.size(table.getItems()).multiply(table.getFixedCellSize()).add(30));
         table.minHeightProperty().bind(table.prefHeightProperty());

@@ -3,13 +3,16 @@ package com.tomasulo.gui;
 import com.tomasulo.gui.controller.ConfigController;
 
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
+import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
 
-public class ConfigView extends VBox {
+public class ConfigView extends BorderPane {
 
     private final ConfigController controller;
 
@@ -34,10 +37,14 @@ public class ConfigView extends VBox {
     public ConfigView(ConfigController controller) {
         this.controller = controller;
         setPadding(new Insets(20));
-        setSpacing(20);
 
         Label title = new Label("Configuration");
         title.setStyle("-fx-font-size: 24px; -fx-font-weight: bold;");
+        
+        VBox topBox = new VBox(title);
+        topBox.setAlignment(Pos.CENTER);
+        topBox.setPadding(new Insets(0, 0, 20, 0));
+        setTop(topBox);
 
         GridPane grid = new GridPane();
         grid.setHgap(10);
@@ -67,6 +74,11 @@ public class ConfigView extends VBox {
         addInput(grid, "Hit Latency:", cacheHitLatency, row++);
         addInput(grid, "Miss Penalty:", cacheMissPenalty, row++);
 
+        ScrollPane scrollPane = new ScrollPane(grid);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setStyle("-fx-background-color:transparent;");
+        setCenter(scrollPane);
+
         Button startButton = new Button("Start Simulation");
         startButton.setMaxWidth(Double.MAX_VALUE);
         startButton.setOnAction(e -> controller.startSimulation(
@@ -75,7 +87,9 @@ public class ConfigView extends VBox {
             cacheSize, blockSize, cacheHitLatency, cacheMissPenalty
         ));
 
-        getChildren().addAll(title, grid, startButton);
+        VBox bottomBox = new VBox(startButton);
+        bottomBox.setPadding(new Insets(20, 0, 0, 0));
+        setBottom(bottomBox);
     }
 
     private void addSection(GridPane grid, String title, int row) {
