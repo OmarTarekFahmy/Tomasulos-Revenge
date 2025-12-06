@@ -34,6 +34,14 @@ public class MainMemory implements IMemory {
         return address >= 0 && (address + numBytes) <= size;
     }
 
+    @Override
+    public byte loadByte(int address) {
+        if (!isValidAddress(address, 1)) {
+            throw new IllegalArgumentException("Invalid memory address: " + address);
+        }
+        return memory[address];
+    }
+
     /**
      * Load a 32-bit word (4 bytes) from memory.
      * Used by: LW instruction
@@ -96,6 +104,15 @@ public class MainMemory implements IMemory {
         ByteBuffer buffer = ByteBuffer.wrap(memory, address, 8);
         buffer.order(ByteOrder.BIG_ENDIAN);
         return buffer.getDouble();
+    }
+
+    @Override
+    public boolean storeByte(int address, byte value) {
+        if (!isValidAddress(address, 1)) {
+            return false;
+        }
+        memory[address] = value;
+        return true;
     }
 
     /**

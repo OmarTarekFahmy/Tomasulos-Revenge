@@ -6,6 +6,7 @@ import java.util.List;
 import com.tomasulo.core.CacheBlock;
 import com.tomasulo.core.Instruction;
 import com.tomasulo.core.LoadBuffer;
+import com.tomasulo.core.MainMemory;
 import com.tomasulo.core.Register;
 import com.tomasulo.core.RegisterFile;
 import com.tomasulo.core.ReservationStation;
@@ -18,12 +19,14 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.RadioButton;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.cell.TextFieldTableCell;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
@@ -49,6 +52,8 @@ public class SimulationView extends BorderPane {
     private TableView<RegisterWrapper> registerTable;
     private TableView<CacheBlock> cacheTable;
     private VBox cacheBox;
+    private TableView<MemoryRow> memoryTable;
+    private VBox memoryBox;
     private TableView<Instruction> instructionQueueTable;
 
     private TabPane tabPane;
@@ -196,6 +201,71 @@ public class SimulationView extends BorderPane {
         cacheBox = new VBox(5);
         cacheBox.getChildren().addAll(new Label("Cache Content"), cacheTable, setCacheBtn);
 
+        // Memory Table
+        memoryTable = new TableView<>();
+        memoryTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        TableColumn<MemoryRow, String> memAddrCol = new TableColumn<>("Address");
+        memAddrCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().address)));
+        TableColumn<MemoryRow, String> memValCol = new TableColumn<>("Value (Double)");
+        memValCol.setCellValueFactory(c -> new SimpleStringProperty(String.format("%.4f", c.getValue().value)));
+        
+        memoryTable.getColumns().addAll(memAddrCol, memValCol);
+        memoryTable.setPlaceholder(new Label("Memory Empty (Zeroes)"));
+        memoryTable.setPrefHeight(200);
+
+        RadioButton setWordBtn = new RadioButton("Set Word (8 bytes)");
+        RadioButton setByteBtn = new RadioButton("Set Byte");
+        ToggleGroup group = new ToggleGroup();
+        setWordBtn.setToggleGroup(group);
+        setByteBtn.setToggleGroup(group);
+        setWordBtn.setSelected(true);
+
+        HBox toggleBox = new HBox(10, setWordBtn, setByteBtn);
+
+        Button setMemBtn = new Button("Set Memory Value");
+        setMemBtn.setMaxWidth(Double.MAX_VALUE);
+        setMemBtn.setOnAction(e -> {
+            boolean isWord = setWordBtn.isSelected();
+            String type = isWord ? "Word Index (8-byte)" : "Byte Address";
+            String example = isWord ? "2 50.5 (Sets addr 16)" : "16 127";
+            
+            TextInputDialog dialog = new TextInputDialog("0 0");
+            dialog.setTitle("Set Memory Value");
+            dialog.setHeaderText("Enter " + type + " and Value (e.g., " + example + ")");
+            dialog.showAndWait().ifPresent(result -> {
+                String[] parts = result.trim().split("\\s+");
+                if (parts.length == 2) {
+                    try {
+                        int inputAddr = Integer.parseInt(parts[0]);
+                        if (isWord) {
+                            double val = Double.parseDouble(parts[1]);
+                            // Convert word index to byte address
+                            int byteAddress = inputAddr * 8;
+                            controller.setMemoryValue(byteAddress, val);
+                        } else {
+                            // Byte
+                            int valInt = Integer.parseInt(parts[1]);
+                            if (valInt < -128 || valInt > 127) {
+                                log("Warning: Byte value out of range (-128 to 127). Casting will occur.");
+                            }
+                            controller.setMemoryByte(inputAddr, (byte) valInt);
+                        }
+                    } catch (NumberFormatException ex) {
+                        log("Invalid format. Address must be integer, Value must be number.");
+                    }
+                } else {
+                    log("Invalid format. Use: ADDRESS VALUE");
+                }
+            });
+        });
+
+        Button loadMemBtn = new Button("Load Memory File");
+        loadMemBtn.setMaxWidth(Double.MAX_VALUE);
+        loadMemBtn.setOnAction(e -> controller.loadMemoryFile());
+
+        memoryBox = new VBox(5);
+        memoryBox.getChildren().addAll(new Label("Memory Content (Non-Zero)"), memoryTable, toggleBox, setMemBtn, loadMemBtn);
+
         rightPane.getChildren().addAll(new Label("Register File"), registerTable, loadRegBtn);
         VBox.setVgrow(registerTable, Priority.ALWAYS);
         setRight(rightPane);
@@ -248,6 +318,10 @@ public class SimulationView extends BorderPane {
             // Row 2: Cache (Span all 6 columns)
             grid.add(cacheBox, 0, 2);
             GridPane.setColumnSpan(cacheBox, 6);
+
+            // Row 3: Memory (Span all 6 columns)
+            grid.add(memoryBox, 0, 3);
+            GridPane.setColumnSpan(memoryBox, 6);
             
             // Make columns grow equally (16.66% each)
             for (int i = 0; i < 6; i++) {
@@ -268,7 +342,7 @@ public class SimulationView extends BorderPane {
             tabPane.getTabs().get(4).setContent(storeTable);
             
             VBox layout = new VBox(10);
-            layout.getChildren().addAll(tabPane, cacheBox);
+            layout.getChildren().addAll(tabPane, cacheBox, memoryBox);
             centerPane.getChildren().add(layout);
         }
     }
@@ -402,6 +476,20 @@ public class SimulationView extends BorderPane {
         }
         cacheTable.getItems().setAll(validBlocks);
         cacheTable.refresh();
+
+        // Memory
+        List<MemoryRow> memRows = new ArrayList<>();
+        MainMemory mem = simulator.getMainMemory();
+        // Scan memory for non-zero values. 
+        // We step by 8 bytes (double size)
+        for (int i = 0; i < mem.getSize(); i += 8) {
+            double val = mem.loadDouble(i);
+            if (val != 0) {
+                memRows.add(new MemoryRow(i, val));
+            }
+        }
+        memoryTable.getItems().setAll(memRows);
+        memoryTable.refresh();
         
         // Instruction Queue
         instructionQueueTable.getItems().setAll(simulator.getInstructionQueue().toList());
@@ -419,6 +507,15 @@ public class SimulationView extends BorderPane {
         public RegisterWrapper(String name, Register register) {
             this.name = name;
             this.register = register;
+        }
+    }
+
+    public static class MemoryRow {
+        public int address;
+        public double value;
+        public MemoryRow(int address, double value) {
+            this.address = address;
+            this.value = value;
         }
     }
 }

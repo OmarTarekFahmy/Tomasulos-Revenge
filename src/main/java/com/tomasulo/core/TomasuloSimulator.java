@@ -1097,8 +1097,16 @@ public class TomasuloSimulator {
     /**
      * Store a double value in memory (bypassing cache for initialization)
      */
+    public MainMemory getMainMemory() {
+        return mainMemory;
+    }
+
     public void setMemoryDouble(int address, double value) {
         mainMemory.storeDouble(address, value);
+    }
+
+    public void setMemoryByte(int address, byte value) {
+        mainMemory.storeByte(address, value);
     }
 
     /**
