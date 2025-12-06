@@ -18,6 +18,7 @@ public class LoadBuffer {
 
     private boolean busy;
     private long sequenceNumber;
+    private Instruction.Opcode opcode; // Track the load type (LD, LW, L.D, L.S)
 
     private int destRegIndex = -1;
     private int baseRegIndex = -1;
@@ -100,6 +101,7 @@ public class LoadBuffer {
         this.tag = producerTag;
         this.sequenceNumber = seqNum;
         this.busy = true;
+        this.opcode = instr.getOpcode(); // Store the load type
 
         this.destRegIndex = instr.getDestReg();
         this.baseRegIndex = instr.getBaseReg();
@@ -181,7 +183,33 @@ public class LoadBuffer {
     public CdbMessage produceCdbMessage(IMemory memory) {
         if (!isCdbReady())
             return null;
-        double value = memory.loadDouble((int) effectiveAddress);
+
+        double value;
+        // Check opcode to determine load type and use appropriate memory operation
+        switch (opcode) {
+            case LW:
+                // Load word (32-bit integer)
+                int intValue = memory.loadWord((int) effectiveAddress);
+                value = (double) intValue;
+                break;
+            case LD:
+                // Load doubleword (64-bit integer)
+                long longValue = memory.loadLong((int) effectiveAddress);
+                value = (double) longValue;
+                break;
+            case L_S:
+                // Load single-precision float
+                float floatValue = memory.loadFloat((int) effectiveAddress);
+                value = (double) floatValue;
+                break;
+            case L_D:
+                // Load double-precision float
+                value = memory.loadDouble((int) effectiveAddress);
+                break;
+            default:
+                throw new IllegalStateException("Unsupported load opcode: " + opcode);
+        }
+
         return new CdbMessage(tag, value, destRegIndex);
     }
 
@@ -197,6 +225,7 @@ public class LoadBuffer {
         }
         busy = false;
         state = State.FREE;
+        opcode = null;
         destRegIndex = -1;
         baseRegIndex = -1;
         offset = 0;

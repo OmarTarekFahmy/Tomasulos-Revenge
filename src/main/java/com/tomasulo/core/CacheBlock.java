@@ -12,15 +12,16 @@ import java.nio.ByteOrder;
  * - Data: the actual cached bytes
  */
 public class CacheBlock {
-    
-    private final byte[] data;       // Raw byte storage for the block
-    private final int blockSize;     // Size in bytes
-    private boolean valid;           // Valid bit
-    private boolean dirty;           // Dirty bit (for write-back policy)
-    private int tag;                 // Tag bits from the address
+
+    private final byte[] data; // Raw byte storage for the block
+    private final int blockSize; // Size in bytes
+    private boolean valid; // Valid bit
+    private boolean dirty; // Dirty bit (for write-back policy)
+    private int tag; // Tag bits from the address
 
     /**
      * Creates a new cache block with the specified size.
+     * 
      * @param blockSizeInBytes Size of the block in bytes
      */
     public CacheBlock(int blockSizeInBytes) {
@@ -57,6 +58,28 @@ public class CacheBlock {
         return sb.toString().trim();
     }
 
+    /**
+     * Get data as decimal double values.
+     * Interprets each 8 bytes as a double-precision float.
+     * 
+     * @return String representation of doubles separated by commas
+     */
+    public String getDataAsDoubles() {
+        StringBuilder sb = new StringBuilder();
+        int numDoubles = blockSize / 8;
+        for (int i = 0; i < numDoubles; i++) {
+            try {
+                double value = readDouble(i * 8);
+                if (sb.length() > 0) {
+                    sb.append(", ");
+                }
+                sb.append(String.format("%.2f", value));
+            } catch (Exception e) {
+                // If can't read as double, skip
+            }
+        }
+        return sb.toString();
+    }
 
     public int getTag() {
         return tag;
@@ -74,6 +97,7 @@ public class CacheBlock {
 
     /**
      * Get all data bytes in this block (for write-back to memory).
+     * 
      * @return Copy of the block's data
      */
     public byte[] getAllData() {
@@ -84,6 +108,7 @@ public class CacheBlock {
 
     /**
      * Set all data bytes in this block (for loading from memory).
+     * 
      * @param newData Data to copy into the block
      */
     public void setAllData(byte[] newData) {
@@ -95,6 +120,7 @@ public class CacheBlock {
 
     /**
      * Read a single byte at the given offset within the block.
+     * 
      * @param offset Byte offset within the block
      * @return The byte value
      */
@@ -107,8 +133,9 @@ public class CacheBlock {
 
     /**
      * Write a single byte at the given offset within the block.
+     * 
      * @param offset Byte offset within the block
-     * @param value The byte value to write
+     * @param value  The byte value to write
      */
     public void writeByte(int offset, byte value) {
         if (offset < 0 || offset >= blockSize) {
@@ -123,6 +150,7 @@ public class CacheBlock {
     /**
      * Read a 32-bit word at the given offset.
      * Used by: LW instruction
+     * 
      * @param offset Byte offset within the block (should be 4-byte aligned)
      * @return The 32-bit integer value
      */
@@ -138,8 +166,9 @@ public class CacheBlock {
     /**
      * Write a 32-bit word at the given offset.
      * Used by: SW instruction
+     * 
      * @param offset Byte offset within the block (should be 4-byte aligned)
-     * @param value The 32-bit integer value to write
+     * @param value  The 32-bit integer value to write
      */
     public void writeWord(int offset, int value) {
         if (offset < 0 || offset + 4 > blockSize) {
@@ -156,6 +185,7 @@ public class CacheBlock {
     /**
      * Read a 64-bit doubleword at the given offset.
      * Used by: LD instruction
+     * 
      * @param offset Byte offset within the block (should be 8-byte aligned)
      * @return The 64-bit long value
      */
@@ -171,8 +201,9 @@ public class CacheBlock {
     /**
      * Write a 64-bit doubleword at the given offset.
      * Used by: SD instruction
+     * 
      * @param offset Byte offset within the block (should be 8-byte aligned)
-     * @param value The 64-bit long value to write
+     * @param value  The 64-bit long value to write
      */
     public void writeLong(int offset, long value) {
         if (offset < 0 || offset + 8 > blockSize) {
@@ -189,6 +220,7 @@ public class CacheBlock {
     /**
      * Read a single-precision float at the given offset.
      * Used by: L.S instruction
+     * 
      * @param offset Byte offset within the block (should be 4-byte aligned)
      * @return The float value
      */
@@ -204,8 +236,9 @@ public class CacheBlock {
     /**
      * Write a single-precision float at the given offset.
      * Used by: S.S instruction
+     * 
      * @param offset Byte offset within the block (should be 4-byte aligned)
-     * @param value The float value to write
+     * @param value  The float value to write
      */
     public void writeFloat(int offset, float value) {
         if (offset < 0 || offset + 4 > blockSize) {
@@ -222,6 +255,7 @@ public class CacheBlock {
     /**
      * Read a double-precision float at the given offset.
      * Used by: L.D instruction
+     * 
      * @param offset Byte offset within the block (should be 8-byte aligned)
      * @return The double value
      */
@@ -237,8 +271,9 @@ public class CacheBlock {
     /**
      * Write a double-precision float at the given offset.
      * Used by: S.D instruction
+     * 
      * @param offset Byte offset within the block (should be 8-byte aligned)
-     * @param value The double value to write
+     * @param value  The double value to write
      */
     public void writeDouble(int offset, double value) {
         if (offset < 0 || offset + 8 > blockSize) {
@@ -264,7 +299,8 @@ public class CacheBlock {
 
     /**
      * Load this block with data from memory.
-     * @param newTag The tag for this block
+     * 
+     * @param newTag    The tag for this block
      * @param blockData The data bytes from memory
      */
     public void loadFromMemory(int newTag, byte[] blockData) {

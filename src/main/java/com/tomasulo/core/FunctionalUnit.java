@@ -11,18 +11,21 @@ public class FunctionalUnit {
     }
 
     private final Type type;
-    private final int primaryLatency;   // Latency for primary operation (or add/mul)
+    private final int primaryLatency; // Latency for primary operation (or add/mul)
     private final int secondaryLatency; // Latency for secondary operation (or sub/div)
-    
+
     private boolean busy = false;
     private ReservationStation current;
     private int remainingCycles;
 
     /**
      * Constructor with user-defined latencies
-     * @param type The type of functional unit
-     * @param primaryLatency Latency for primary op (INT_ALU: all, FP_ADD_SUB: add/sub, FP_MUL_DIV: mul)
-     * @param secondaryLatency Latency for secondary op (FP_MUL_DIV: div, others: same as primary)
+     * 
+     * @param type             The type of functional unit
+     * @param primaryLatency   Latency for primary op (INT_ALU: all, FP_ADD_SUB:
+     *                         add/sub, FP_MUL_DIV: mul)
+     * @param secondaryLatency Latency for secondary op (FP_MUL_DIV: div, others:
+     *                         same as primary)
      */
     public FunctionalUnit(Type type, int primaryLatency, int secondaryLatency) {
         this.type = type;
@@ -31,7 +34,7 @@ public class FunctionalUnit {
     }
 
     /**
-     * Constructor with default latencies 
+     * Constructor with default latencies
      */
     public FunctionalUnit(Type type) {
         this.type = type;
@@ -45,7 +48,7 @@ public class FunctionalUnit {
                 this.secondaryLatency = 3;
                 break;
             case FP_MUL_DIV:
-                this.primaryLatency = 5;  // MUL
+                this.primaryLatency = 5; // MUL
                 this.secondaryLatency = 12; // DIV
                 break;
             default:
@@ -84,14 +87,14 @@ public class FunctionalUnit {
 
     private boolean isFpAddSubOp(Opcode op) {
         return switch (op) {
-            case ADD_D, SUB_D -> true;
+            case ADD_D, ADD_S, SUB_D, SUB_S -> true;
             default -> false;
         };
     }
 
     private boolean isFpMulDivOp(Opcode op) {
         return switch (op) {
-            case MUL_D, DIV_D -> true;
+            case MUL_D, MUL_S, DIV_D, DIV_S -> true;
             default -> false;
         };
     }
@@ -103,8 +106,8 @@ public class FunctionalUnit {
             case INT_ALU -> primaryLatency;
             case FP_ADD_SUB -> primaryLatency; // ADD_D, SUB_D both use primary
             case FP_MUL_DIV -> switch (op) {
-                case MUL_D -> primaryLatency;
-                case DIV_D -> secondaryLatency;
+                case MUL_D, MUL_S -> primaryLatency;
+                case DIV_D, DIV_S -> secondaryLatency;
                 default -> primaryLatency;
             };
         };
@@ -171,16 +174,16 @@ public class FunctionalUnit {
 
     private double execFpAddSub(Opcode op, double vj, double vk) {
         return switch (op) {
-            case ADD_D -> vj + vk;
-            case SUB_D -> vj - vk;
+            case ADD_D, ADD_S -> vj + vk;
+            case SUB_D, SUB_S -> vj - vk;
             default -> 0.0;
         };
     }
 
     private double execFpMulDiv(Opcode op, double vj, double vk) {
         return switch (op) {
-            case MUL_D -> vj * vk;
-            case DIV_D -> vj / vk;
+            case MUL_D, MUL_S -> vj * vk;
+            case DIV_D, DIV_S -> vj / vk;
             default -> 0.0;
         };
     }
@@ -191,7 +194,7 @@ public class FunctionalUnit {
     public String debugString() {
         if (busy) {
             return String.format("FU[%s] busy, executing %s for %s, %d cycles remaining",
-                    type, current.getOpcode(), current.getTag(), remainingCycles-1);
+                    type, current.getOpcode(), current.getTag(), remainingCycles - 1);
         } else {
             return String.format("FU[%s] idle", type);
         }

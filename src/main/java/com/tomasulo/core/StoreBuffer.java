@@ -16,6 +16,7 @@ public class StoreBuffer {
     private Tag tag; // for completeness; not used on CDB
     private boolean busy;
     private long sequenceNumber;
+    private Instruction.Opcode opcode; // Track the store type (SD, SW, S.D, S.S)
 
     private int baseRegIndex = -1;
     private int srcRegIndex = -1;
@@ -99,6 +100,7 @@ public class StoreBuffer {
         this.tag = producerTag;
         this.sequenceNumber = seqNum;
         this.busy = true;
+        this.opcode = instr.getOpcode(); // Store the store type
 
         this.baseRegIndex = instr.getBaseReg();
         this.offset = instr.getOffset();
@@ -231,7 +233,27 @@ public class StoreBuffer {
 
         remainingCycles--;
         if (remainingCycles <= 0) {
-            memory.storeDouble((int) effectiveAddress, valueToStore);
+            // Use appropriate store function based on instruction type
+            switch (opcode) {
+                case SW:
+                    // Store word (32-bit integer)
+                    memory.storeWord((int) effectiveAddress, (int) valueToStore);
+                    break;
+                case SD:
+                    // Store doubleword (64-bit integer)
+                    memory.storeLong((int) effectiveAddress, (long) valueToStore);
+                    break;
+                case S_S:
+                    // Store single-precision float
+                    memory.storeFloat((int) effectiveAddress, (float) valueToStore);
+                    break;
+                case S_D:
+                    // Store double-precision float
+                    memory.storeDouble((int) effectiveAddress, valueToStore);
+                    break;
+                default:
+                    throw new IllegalStateException("Unsupported store opcode: " + opcode);
+            }
             clear();
         }
     }
@@ -242,6 +264,7 @@ public class StoreBuffer {
     private void clear() {
         busy = false;
         state = State.FREE;
+        opcode = null;
         baseRegIndex = -1;
         srcRegIndex = -1;
         offset = 0;

@@ -13,11 +13,17 @@ public class Instruction {
         // Branches (conditional)
         BEQ, BNE,
 
-        // FP ADD/SUB
+        // FP ADD/SUB (double-precision)
         ADD_D, SUB_D,
 
-        // FP MUL/DIV
+        // FP ADD/SUB (single-precision)
+        ADD_S, SUB_S,
+
+        // FP MUL/DIV (double-precision)
         MUL_D, DIV_D,
+
+        // FP MUL/DIV (single-precision)
+        MUL_S, DIV_S,
     }
 
     private final Opcode opcode;
@@ -97,14 +103,14 @@ public class Instruction {
 
     public boolean isFpAddSub() {
         return switch (opcode) {
-            case ADD_D, SUB_D -> true;
+            case ADD_D, SUB_D, ADD_S, SUB_S -> true;
             default -> false;
         };
     }
 
     public boolean isFpMulDiv() {
         return switch (opcode) {
-            case MUL_D, DIV_D -> true;
+            case MUL_D, DIV_D, MUL_S, DIV_S -> true;
             default -> false;
         };
     }
@@ -121,8 +127,10 @@ public class Instruction {
         // Everything binary + immediates, excluding pure jumps
         return switch (opcode) {
             case
-                    // FP binary
+                    // FP binary (double-precision)
                     ADD_D, SUB_D, MUL_D, DIV_D,
+                    // FP binary (single-precision)
+                    ADD_S, SUB_S, MUL_S, DIV_S,
                     // branches (comparing two registers)
                     BEQ, BNE ->
                 true;

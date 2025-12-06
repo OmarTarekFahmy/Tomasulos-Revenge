@@ -51,7 +51,7 @@ public class InstructionParser {
                     immediate = Integer.parseInt(tokens[3]);
                     break;
 
-                // FP ADD/SUB
+                // FP ADD/SUB (Double Precision)
                 case "ADD.D":
                     opcode = Opcode.ADD_D;
                     destReg = parseRegister(tokens[1]);
@@ -66,7 +66,22 @@ public class InstructionParser {
                     src2Reg = parseRegister(tokens[3]);
                     break;
 
-                // FP MUL/DIV
+                // FP ADD/SUB (Single Precision)
+                case "ADD.S":
+                    opcode = Opcode.ADD_S;
+                    destReg = parseRegister(tokens[1]);
+                    src1Reg = parseRegister(tokens[2]);
+                    src2Reg = parseRegister(tokens[3]);
+                    break;
+
+                case "SUB.S":
+                    opcode = Opcode.SUB_S;
+                    destReg = parseRegister(tokens[1]);
+                    src1Reg = parseRegister(tokens[2]);
+                    src2Reg = parseRegister(tokens[3]);
+                    break;
+
+                // FP MUL/DIV (Double Precision)
                 case "MUL.D":
                     opcode = Opcode.MUL_D;
                     destReg = parseRegister(tokens[1]);
@@ -76,6 +91,21 @@ public class InstructionParser {
 
                 case "DIV.D":
                     opcode = Opcode.DIV_D;
+                    destReg = parseRegister(tokens[1]);
+                    src1Reg = parseRegister(tokens[2]);
+                    src2Reg = parseRegister(tokens[3]);
+                    break;
+
+                // FP MUL/DIV (Single Precision)
+                case "MUL.S":
+                    opcode = Opcode.MUL_S;
+                    destReg = parseRegister(tokens[1]);
+                    src1Reg = parseRegister(tokens[2]);
+                    src2Reg = parseRegister(tokens[3]);
+                    break;
+
+                case "DIV.S":
+                    opcode = Opcode.DIV_S;
                     destReg = parseRegister(tokens[1]);
                     src1Reg = parseRegister(tokens[2]);
                     src2Reg = parseRegister(tokens[3]);
@@ -190,7 +220,7 @@ public class InstructionParser {
     // Parse register name like "R1", "F2" to integer index
     // FP registers are offset by 32 (F0 = 32, F1 = 33, etc.)
     private static final int FP_BASE = 32;
-    
+
     private static int parseRegister(String reg) {
         reg = reg.trim().toUpperCase();
         if (reg.startsWith("R")) {

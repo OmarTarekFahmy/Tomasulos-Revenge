@@ -61,6 +61,7 @@ public class TomasuloSimulator {
     private final List<BranchHandler> branchHandlers = new ArrayList<>();
     private int programCounter = 0; // Current PC (index into program)
     private boolean branchPending = false; // True if a branch is in-flight
+    private boolean branchTakenThisCycle = false; // True if branch taken in current cycle
 
     private final CommonDataBus cdb = new CommonDataBus();
     private final List<AddressUnit> addressUnits = new ArrayList<>();
@@ -139,9 +140,11 @@ public class TomasuloSimulator {
 
         // Initialize memory hierarchy
         this.mainMemory = new MainMemory(config.memorySize);
-        mainMemory.storeDouble(0, 6.5);
-        mainMemory.storeDouble(8, 2.5);
-        mainMemory.storeDouble(24, 16);
+        mainMemory.storeDouble(0, 8);
+        mainMemory.storeDouble(8, 6);
+        mainMemory.storeDouble(16, 4);
+        mainMemory.storeDouble(24, 2);
+        mainMemory.storeDouble(32, 1);
         this.cache = new Cache(cacheSize, blockSize, cacheHitLatency, cacheMissPenalty, mainMemory);
 
         // Load program into IQ
@@ -221,15 +224,6 @@ public class TomasuloSimulator {
 
     // --- main simulation loop ---
 
-    public void run(int maxCycles) {
-        while (cycle < maxCycles && !isFinished()) {
-            step();
-        }
-
-        System.out.println("\nSimulation finished at cycle " + cycle);
-        printFinalRegisters();
-    }
-
     public boolean isFinished() {
         return iq.isEmpty() && !anyBusy() && !branchPending;
     }
@@ -238,6 +232,9 @@ public class TomasuloSimulator {
         cycle++;
         cycleLog.clear();
         log("\n========== CYCLE " + cycle + " ==========");
+
+        // Reset branch taken flag at start of cycle
+        branchTakenThisCycle = false;
 
         // 0) Tick all RS, branch handlers, and address units to advance state machines
         tickReservationStations();
@@ -362,6 +359,7 @@ public class TomasuloSimulator {
                     // Jump to target - reload instruction queue from target PC
                     int targetPC = bh.getNextPC();
                     reloadInstructionQueue(targetPC);
+                    branchTakenThisCycle = true;
                 }
 
                 // Free the branch handler
@@ -750,6 +748,12 @@ public class TomasuloSimulator {
         if (iq.isEmpty())
             return;
 
+        // Don't issue in the same cycle a branch is taken
+        if (branchTakenThisCycle) {
+            log("[ISSUE] Stall: branch taken this cycle, will issue next cycle");
+            return;
+        }
+
         Instruction instr = iq.peek();
         Opcode op = instr.getOpcode();
 
@@ -1006,15 +1010,6 @@ public class TomasuloSimulator {
         return iq.size() + " (head=" + head.getOpcode() + ")";
     }
 
-    private void printFinalRegisters() {
-        System.out.println("\n=== FINAL REGISTER STATE ===");
-        printState();
-
-        // Print cache statistics
-        System.out.println("\n=== CACHE STATISTICS ===");
-        cache.printStats();
-    }
-
     // --- Public accessors for GUI/external use ---
 
     public RegisterFile getRegisterFile() {
@@ -1069,90 +1064,55 @@ public class TomasuloSimulator {
         return mainMemory;
     }
 
-    /**
-     * Set a register value (for initialization)
-     */
-    public void setRegister(int regIndex, double value) {
-        if (regIndex == 0)
-            return; // R0 is hardwired to 0
-        registerFile.get(regIndex).setValue(value);
-    }
-
-    /**
-     * Set an integer register value
-     */
-    public void setIntRegister(int regNum, int value) {
-        if (regNum == 0)
-            return; // R0 is hardwired to 0
-        registerFile.get(r(regNum)).setValue(value);
-    }
-
-    /**
-     * Set a floating-point register value
-     */
-    public void setFpRegister(int regNum, double value) {
-        registerFile.get(f(regNum)).setValue(value);
-    }
-
-    /**
-     * Store a double value in memory (bypassing cache for initialization)
-     */
-    public void setMemoryDouble(int address, double value) {
-        mainMemory.storeDouble(address, value);
-    }
-
-    /**
-     * Store a word value in memory (bypassing cache for initialization)
-     */
-    public void setMemoryWord(int address, int value) {
-        mainMemory.storeWord(address, value);
-    }
-
     // --- Main entry point for testing ---
 
-    public static void main(String[] args) {
-        // Create configuration
-        Config config = new Config();
-        config.numFpAddSubRs = 3;
-        config.numFpMulDivRs = 3;
-        config.numIntRs = 3;
-        config.numLoadBuffers = 2;
-        config.numStoreBuffers = 2;
-        config.numFpAddSubUnits = 1;
-        config.numFpMulDivUnits = 1;
-        config.numIntAluUnits = 1;
-
-        // Set latencies
-        config.intAluLatency = 1;
-        config.fpAddSubLatency = 3;
-        config.fpMulLatency = 5;
-        config.fpDivLatency = 12;
-
-        // Cache configuration
-        config.cacheSize = 1024;
-        config.blockSize = 64;
-        config.cacheHitLatency = 1;
-        config.cacheMissPenalty = 10;
-
-        System.out.println("===== Running Tomasulo Simulator =====");
-        List<Instruction> program = com.tomasulo.parser.InstructionParser.parseFile("src/main/resources/test.txt");
-        TomasuloSimulator sim = new TomasuloSimulator(program, config);
-
-        // Initialize registers and memory for testing
-        // For the loop program: R1 starts at 0, gets 24 added, decrements by 8 until
-        // R1==R2
-        // R2 starts at 0 (loop termination condition)
-        sim.setIntRegister(1, 0); // R1 = 0 (will become 24 after DADDI)
-        sim.setIntRegister(2, 0); // R2 = 0 (loop termination value)
-
-        // Memory locations that will be accessed: 8(R1) where R1 = 24, 16, 8
-        // So addresses: 32, 24, 16
-        sim.setMemoryDouble(32, 1.0); // 8 + 24 = 32
-        sim.setMemoryDouble(24, 2.0); // 8 + 16 = 24
-        sim.setMemoryDouble(16, 3.0); // 8 + 8 = 16
-
-        sim.setFpRegister(2, 2.0); // F2 = 2.0 (multiplier)
-
-        sim.run(100);
-    }
+    /*
+     * public static void main(String[] args) {
+     * // Create configuration
+     * Config config = new Config();
+     * config.numFpAddSubRs = 3;
+     * config.numFpMulDivRs = 3;
+     * config.numIntRs = 3;
+     * config.numLoadBuffers = 2;
+     * config.numStoreBuffers = 2;
+     * config.numFpAddSubUnits = 1;
+     * config.numFpMulDivUnits = 1;
+     * config.numIntAluUnits = 1;
+     * 
+     * // Set latencies
+     * config.intAluLatency = 1;
+     * config.fpAddSubLatency = 3;
+     * config.fpMulLatency = 5;
+     * config.fpDivLatency = 12;
+     * 
+     * // Cache configuration
+     * config.cacheSize = 1024;
+     * config.blockSize = 64;
+     * config.cacheHitLatency = 1;
+     * config.cacheMissPenalty = 10;
+     * 
+     * System.out.println("===== Running Tomasulo Simulator =====");
+     * List<Instruction> program =
+     * com.tomasulo.parser.InstructionParser.parseFile("src/main/resources/test.txt"
+     * );
+     * TomasuloSimulator sim = new TomasuloSimulator(program, config);
+     * 
+     * // Initialize registers and memory for testing
+     * // For the loop program: R1 starts at 0, gets 24 added, decrements by 8 until
+     * // R1==R2
+     * // R2 starts at 0 (loop termination condition)
+     * sim.setIntRegister(1, 0); // R1 = 0 (will become 24 after DADDI)
+     * sim.setIntRegister(2, 0); // R2 = 0 (loop termination value)
+     * 
+     * // Memory locations that will be accessed: 8(R1) where R1 = 24, 16, 8
+     * // So addresses: 32, 24, 16
+     * sim.setMemoryDouble(32, 1.0); // 8 + 24 = 32
+     * sim.setMemoryDouble(24, 2.0); // 8 + 16 = 24
+     * sim.setMemoryDouble(16, 3.0); // 8 + 8 = 16
+     * 
+     * sim.setFpRegister(2, 2.0); // F2 = 2.0 (multiplier)
+     * 
+     * sim.run(100);
+     * }
+     */
 }
