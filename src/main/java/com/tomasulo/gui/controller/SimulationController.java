@@ -34,6 +34,7 @@ public class SimulationController {
 
     public void loadProgramFile() {
         FileChooser fileChooser = new FileChooser();
+        fileChooser.setInitialDirectory(new File(System.getProperty("user.dir")));
         File file = fileChooser.showOpenDialog(stage);
         if (file != null) {
             List<Instruction> instructions = InstructionParser.parseFile(file.getAbsolutePath());
@@ -82,6 +83,22 @@ public class SimulationController {
 
         view.updateView();
         view.log("Program loaded. " + instructions.size() + " instructions.");
+    }
+
+    public void setMemoryValue(int address, double value) {
+        if (simulator != null) {
+            simulator.setMemoryDouble(address, value);
+            view.updateView();
+            view.log("Memory[" + address + "] set to " + value);
+        }
+    }
+
+    public void setMemoryByte(int address, byte value) {
+        if (simulator != null) {
+            simulator.setMemoryByte(address, value);
+            view.updateView();
+            view.log("Memory[" + address + "] set to byte " + value);
+        }
     }
 
     public void step() {
@@ -174,6 +191,7 @@ public class SimulationController {
         }
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Open Register File");
+        fileChooser.setInitialDirectory(new File(System.getProperty("user.dir")));
         File file = fileChooser.showOpenDialog(stage);
         if (file != null) {
             try {
@@ -186,6 +204,48 @@ public class SimulationController {
             } catch (IOException e) {
                 view.log("Error reading register file: " + e.getMessage());
             }
+        }
+    }
+
+    public void loadMemoryFile() {
+        if (simulator == null) {
+            view.log("Please load a program first to initialize the simulator.");
+            return;
+        }
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Open Memory File");
+        fileChooser.setInitialDirectory(new File(System.getProperty("user.dir")));
+        File file = fileChooser.showOpenDialog(stage);
+        if (file != null) {
+            try {
+                List<String> lines = java.nio.file.Files.readAllLines(file.toPath());
+                for (String line : lines) {
+                    parseMemoryLine(line);
+                }
+                view.updateView();
+                view.log("Memory file loaded.");
+            } catch (IOException e) {
+                view.log("Error reading memory file: " + e.getMessage());
+            }
+        }
+    }
+
+    private void parseMemoryLine(String line) {
+        line = line.trim();
+        if (line.isEmpty() || line.startsWith("#") || line.startsWith("//")) return;
+
+        String[] parts = line.split("\\s+");
+        if (parts.length != 2) {
+            view.log("Invalid memory line format: " + line);
+            return;
+        }
+
+        try {
+            int address = Integer.parseInt(parts[0]);
+            double value = Double.parseDouble(parts[1]);
+            simulator.setMemoryDouble(address, value);
+        } catch (NumberFormatException e) {
+            view.log("Error parsing memory line: " + line + ". Address must be int, Value must be double.");
         }
     }
 
