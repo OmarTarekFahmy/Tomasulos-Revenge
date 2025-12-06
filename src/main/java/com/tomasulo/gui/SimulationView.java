@@ -176,13 +176,19 @@ public class SimulationView extends BorderPane {
         setCacheBtn.setOnAction(e -> {
             TextInputDialog dialog = new TextInputDialog("0 10.5");
             dialog.setTitle("Set Cache Value");
-            dialog.setHeaderText("Enter Address and Value (e.g., 100 50.5)");
+            dialog.setHeaderText("Enter Word Index (8-byte) and Value (e.g., 2 50.5 -> Addr 16)");
             dialog.showAndWait().ifPresent(result -> {
                 String[] parts = result.trim().split("\\s+");
                 if (parts.length == 2) {
-                    controller.setCacheValue(parts[0], parts[1]);
+                    try {
+                        int wordIndex = Integer.parseInt(parts[0]);
+                        int byteAddress = wordIndex * 8;
+                        controller.setCacheValue(String.valueOf(byteAddress), parts[1]);
+                    } catch (NumberFormatException ex) {
+                        log("Invalid format. Address must be an integer.");
+                    }
                 } else {
-                    log("Invalid format. Use: ADDRESS VALUE");
+                    log("Invalid format. Use: WORD_INDEX VALUE");
                 }
             });
         });

@@ -30,7 +30,7 @@ public class ConfigView extends BorderPane {
 
     // Cache
     private final TextField cacheSize = new TextField("1024");
-    private final TextField blockSize = new TextField("64");
+    private final TextField blockSize = new TextField("8");
     private final TextField cacheHitLatency = new TextField("1");
     private final TextField cacheMissPenalty = new TextField("10");
 
