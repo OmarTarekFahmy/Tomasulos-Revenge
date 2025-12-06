@@ -20,19 +20,19 @@ package com.tomasulo.core;
  */
 public class Cache implements IMemory {
 
-    private final CacheBlock[] blocks;       // Array of cache blocks
-    private final MainMemory mainMemory;     // Reference to main memory (next level)
-    
-    private final int cacheSize;             // Total cache size in bytes
-    private final int blockSize;             // Size of each block in bytes
-    private final int numBlocks;             // Number of blocks in cache
-    
-    private final int blockOffsetBits;       // Number of bits for block offset
-    private final int indexBits;             // Number of bits for index
-    
-    private final int hitLatency;            // Cycles for cache hit
-    private final int missLatency;           // Additional cycles for cache miss (memory access)
-    
+    private final CacheBlock[] blocks; // Array of cache blocks
+    private final MainMemory mainMemory; // Reference to main memory (next level)
+
+    private final int cacheSize; // Total cache size in bytes
+    private final int blockSize; // Size of each block in bytes
+    private final int numBlocks; // Number of blocks in cache
+
+    private final int blockOffsetBits; // Number of bits for block offset
+    private final int indexBits; // Number of bits for index
+
+    private final int hitLatency; // Cycles for cache hit
+    private final int missLatency; // Additional cycles for cache miss (memory access)
+
     // Statistics
     private int hits = 0;
     private int misses = 0;
@@ -55,18 +55,18 @@ public class Cache implements IMemory {
         if (blockSize > cacheSize) {
             throw new IllegalArgumentException("Block size cannot be larger than cache size");
         }
-        
+
         this.cacheSize = cacheSize;
         this.blockSize = blockSize;
         this.numBlocks = cacheSize / blockSize;
         this.hitLatency = hitLatency;
         this.missLatency = missLatency;
         this.mainMemory = mainMemory;
-        
+
         // Calculate bit widths
         this.blockOffsetBits = log2(blockSize);
         this.indexBits = log2(numBlocks);
-        
+
         // Initialize cache blocks
         this.blocks = new CacheBlock[numBlocks];
         for (int i = 0; i < numBlocks; i++) {
@@ -78,6 +78,7 @@ public class Cache implements IMemory {
 
     /**
      * Extract the block offset from an address.
+     * 
      * @param address The memory address
      * @return The block offset (byte position within block)
      */
@@ -87,6 +88,7 @@ public class Cache implements IMemory {
 
     /**
      * Extract the cache index from an address.
+     * 
      * @param address The memory address
      * @return The cache index (which block in the cache)
      */
@@ -96,6 +98,7 @@ public class Cache implements IMemory {
 
     /**
      * Extract the tag from an address.
+     * 
      * @param address The memory address
      * @return The tag (for matching)
      */
@@ -105,7 +108,8 @@ public class Cache implements IMemory {
 
     /**
      * Reconstruct the memory address of a block given its index and tag.
-     * @param tag The tag of the block
+     * 
+     * @param tag   The tag of the block
      * @param index The index of the block
      * @return The starting memory address of the block
      */
@@ -117,6 +121,7 @@ public class Cache implements IMemory {
 
     /**
      * Check if an address hits in the cache.
+     * 
      * @param address The memory address
      * @return true if cache hit, false if miss
      */
@@ -130,28 +135,30 @@ public class Cache implements IMemory {
     /**
      * Handle a cache miss by fetching the block from memory.
      * If the current block is dirty, write it back first.
+     * 
      * @param address The memory address that caused the miss
      */
     private void handleMiss(int address) {
         int index = getIndex(address);
         int tag = getTag(address);
         CacheBlock block = blocks[index];
-        
+
         // Write back if dirty
         if (block.isValid() && block.isDirty()) {
             writeBackBlock(index);
         }
-        
+
         // Fetch new block from memory
         int blockStartAddress = address & ~((1 << blockOffsetBits) - 1); // Align to block boundary
         byte[] data = mainMemory.readBytes(blockStartAddress, blockSize);
         block.loadFromMemory(tag, data);
-        
+
         misses++;
     }
 
     /**
      * Write back a dirty block to main memory.
+     * 
      * @param index The index of the block to write back
      */
     private void writeBackBlock(int index) {
@@ -166,6 +173,7 @@ public class Cache implements IMemory {
 
     /**
      * Ensure a block is in the cache (fetch if necessary).
+     * 
      * @param address The memory address
      */
     private void ensureBlockPresent(int address) {
@@ -229,19 +237,23 @@ public class Cache implements IMemory {
     /**
      * Store a 32-bit word to cache.
      * Used by: SW instruction
+     * Write-through policy: updates both cache and main memory
      */
     @Override
     public boolean storeWord(int address, int value) {
-        ensureBlockPresent(address);  // Write-allocate: fetch block on miss
+        ensureBlockPresent(address); // Write-allocate: fetch block on miss
         int index = getIndex(address);
         int offset = getBlockOffset(address);
         blocks[index].writeWord(offset, value);
+        // Write-through: also update main memory immediately
+        mainMemory.storeWord(address, value);
         return true;
     }
 
     /**
      * Store a 64-bit doubleword to cache.
      * Used by: SD instruction
+     * Write-through policy: updates both cache and main memory
      */
     @Override
     public boolean storeLong(int address, long value) {
@@ -249,12 +261,15 @@ public class Cache implements IMemory {
         int index = getIndex(address);
         int offset = getBlockOffset(address);
         blocks[index].writeLong(offset, value);
+        // Write-through: also update main memory immediately
+        mainMemory.storeLong(address, value);
         return true;
     }
 
     /**
      * Store a single-precision float to cache.
      * Used by: S.S instruction
+     * Write-through policy: updates both cache and main memory
      */
     @Override
     public boolean storeFloat(int address, float value) {
@@ -262,12 +277,15 @@ public class Cache implements IMemory {
         int index = getIndex(address);
         int offset = getBlockOffset(address);
         blocks[index].writeFloat(offset, value);
+        // Write-through: also update main memory immediately
+        mainMemory.storeFloat(address, value);
         return true;
     }
 
     /**
      * Store a double-precision float to cache.
      * Used by: S.D instruction
+     * Write-through policy: updates both cache and main memory
      */
     @Override
     public boolean storeDouble(int address, double value) {
@@ -275,6 +293,8 @@ public class Cache implements IMemory {
         int index = getIndex(address);
         int offset = getBlockOffset(address);
         blocks[index].writeDouble(offset, value);
+        // Write-through: also update main memory immediately
+        mainMemory.storeDouble(address, value);
         return true;
     }
 
@@ -282,6 +302,7 @@ public class Cache implements IMemory {
 
     /**
      * Get the access latency for a given address.
+     * 
      * @param address The memory address
      * @return Number of cycles for this access
      */
@@ -409,5 +430,32 @@ public class Cache implements IMemory {
     public CacheBlock[] getBlocks() {
         return blocks;
     }
-}
 
+    /**
+     * Load a single byte from cache.
+     * Used by: LB instruction (if implemented)
+     */
+    @Override
+    public byte loadByte(int address) {
+        ensureBlockPresent(address);
+        int index = getIndex(address);
+        int offset = getBlockOffset(address);
+        return blocks[index].readByte(offset);
+    }
+
+    /**
+     * Store a single byte to cache.
+     * Used by: SB instruction (if implemented)
+     * Write-through policy: updates both cache and main memory
+     */
+    @Override
+    public boolean storeByte(int address, byte value) {
+        ensureBlockPresent(address); // Write-allocate: fetch block on miss
+        int index = getIndex(address);
+        int offset = getBlockOffset(address);
+        blocks[index].writeByte(offset, value);
+        // Write-through: also update main memory immediately
+        mainMemory.storeByte(address, value);
+        return true;
+    }
+}

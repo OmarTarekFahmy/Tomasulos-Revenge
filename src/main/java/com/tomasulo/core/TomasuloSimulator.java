@@ -1069,9 +1069,6 @@ public class TomasuloSimulator {
     /**
      * Store a double value in memory (bypassing cache for initialization)
      */
-    public MainMemory getMainMemory() {
-        return mainMemory;
-    }
 
     public void setMemoryDouble(int address, double value) {
         mainMemory.storeDouble(address, value);
@@ -1090,49 +1087,53 @@ public class TomasuloSimulator {
 
     // --- Main entry point for testing ---
 
-    public static void main(String[] args) {
-        // Create configuration
-        Config config = new Config();
-        config.numFpAddSubRs = 3;
-        config.numFpMulDivRs = 3;
-        config.numIntRs = 3;
-        config.numLoadBuffers = 2;
-        config.numStoreBuffers = 2;
-        config.numFpAddSubUnits = 1;
-        config.numFpMulDivUnits = 1;
-        config.numIntAluUnits = 1;
-
-        // Set latencies
-        config.intAluLatency = 1;
-        config.fpAddSubLatency = 3;
-        config.fpMulLatency = 5;
-        config.fpDivLatency = 12;
-
-        // Cache configuration
-        config.cacheSize = 1024;
-        config.blockSize = 64;
-        config.cacheHitLatency = 1;
-        config.cacheMissPenalty = 10;
-
-        System.out.println("===== Running Tomasulo Simulator =====");
-        List<Instruction> program = com.tomasulo.parser.InstructionParser.parseFile("src/main/resources/test.txt");
-        TomasuloSimulator sim = new TomasuloSimulator(program, config);
-
-        // Initialize registers and memory for testing
-        // For the loop program: R1 starts at 0, gets 24 added, decrements by 8 until
-        // R1==R2
-        // R2 starts at 0 (loop termination condition)
-        sim.setIntRegister(1, 0); // R1 = 0 (will become 24 after DADDI)
-        sim.setIntRegister(2, 0); // R2 = 0 (loop termination value)
-
-        // Memory locations that will be accessed: 8(R1) where R1 = 24, 16, 8
-        // So addresses: 32, 24, 16
-        sim.setMemoryDouble(32, 1.0); // 8 + 24 = 32
-        sim.setMemoryDouble(24, 2.0); // 8 + 16 = 24
-        sim.setMemoryDouble(16, 3.0); // 8 + 8 = 16
-
-        sim.setFpRegister(2, 2.0); // F2 = 2.0 (multiplier)
-
-        sim.run(100);
-    }
+    /*
+     * public static void main(String[] args) {
+     * // Create configuration
+     * Config config = new Config();
+     * config.numFpAddSubRs = 3;
+     * config.numFpMulDivRs = 3;
+     * config.numIntRs = 3;
+     * config.numLoadBuffers = 2;
+     * config.numStoreBuffers = 2;
+     * config.numFpAddSubUnits = 1;
+     * config.numFpMulDivUnits = 1;
+     * config.numIntAluUnits = 1;
+     * 
+     * // Set latencies
+     * config.intAluLatency = 1;
+     * config.fpAddSubLatency = 3;
+     * config.fpMulLatency = 5;
+     * config.fpDivLatency = 12;
+     * 
+     * // Cache configuration
+     * config.cacheSize = 1024;
+     * config.blockSize = 64;
+     * config.cacheHitLatency = 1;
+     * config.cacheMissPenalty = 10;
+     * 
+     * System.out.println("===== Running Tomasulo Simulator =====");
+     * List<Instruction> program =
+     * com.tomasulo.parser.InstructionParser.parseFile("src/main/resources/test.txt"
+     * );
+     * TomasuloSimulator sim = new TomasuloSimulator(program, config);
+     * 
+     * // Initialize registers and memory for testing
+     * // For the loop program: R1 starts at 0, gets 24 added, decrements by 8 until
+     * // R1==R2
+     * // R2 starts at 0 (loop termination condition)
+     * sim.setIntRegister(1, 0); // R1 = 0 (will become 24 after DADDI)
+     * sim.setIntRegister(2, 0); // R2 = 0 (loop termination value)
+     * 
+     * // Memory locations that will be accessed: 8(R1) where R1 = 24, 16, 8
+     * // So addresses: 32, 24, 16
+     * sim.setMemoryDouble(32, 1.0); // 8 + 24 = 32
+     * sim.setMemoryDouble(24, 2.0); // 8 + 16 = 24
+     * sim.setMemoryDouble(16, 3.0); // 8 + 8 = 16
+     * 
+     * sim.setFpRegister(2, 2.0); // F2 = 2.0 (multiplier)
+     * 
+     * sim.run(100);
+     * }
+     */
 }

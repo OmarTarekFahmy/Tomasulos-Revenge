@@ -42,7 +42,7 @@ public class SimulationView extends BorderPane {
     private Label cycleLabel;
     private TextArea logArea;
     private TextArea programInput;
-    
+
     // Tables
     private TableView<ReservationStation> fpAddTable;
     private TableView<ReservationStation> fpMulTable;
@@ -55,10 +55,10 @@ public class SimulationView extends BorderPane {
     private TableView<MemoryRow> memoryTable;
     private VBox memoryBox;
     private TableView<Instruction> instructionQueueTable;
+    private TableView<ConfigRow> configTable;
 
     private TabPane tabPane;
     private VBox centerPane;
-
 
     public SimulationView(SimulationController controller) {
         this.controller = controller;
@@ -69,7 +69,7 @@ public class SimulationView extends BorderPane {
         // Top Control Bar
         HBox topBar = new HBox(10);
         topBar.setPadding(new Insets(10));
-        
+
         Button loadBtn = new Button("Load Program File");
         loadBtn.setOnAction(e -> controller.loadProgramFile());
 
@@ -106,18 +106,31 @@ public class SimulationView extends BorderPane {
         instructionQueueTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         TableColumn<Instruction, String> iqOpCol = new TableColumn<>("Opcode");
         iqOpCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getOpcode().toString()));
-        TableColumn<Instruction, String> iqDestCol = new TableColumn<>("Dest");
-        iqDestCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().getDestReg())));
-        instructionQueueTable.getColumns().addAll(iqOpCol, iqDestCol);
+        TableColumn<Instruction, String> iqOperandsCol = new TableColumn<>("Operands");
+        iqOperandsCol.setCellValueFactory(c -> new SimpleStringProperty(formatInstructionOperands(c.getValue())));
+        instructionQueueTable.getColumns().addAll(iqOpCol, iqOperandsCol);
         instructionQueueTable.setPlaceholder(new Label("Instruction Queue Empty"));
 
-        leftPane.getChildren().addAll(new Label("Program Input:"), programInput, loadTextBtn, new Label("Instruction Queue:"), instructionQueueTable);
+        // Configuration Table
+        configTable = new TableView<>();
+        configTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        TableColumn<ConfigRow, String> configParamCol = new TableColumn<>("Parameter");
+        configParamCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().parameter));
+        TableColumn<ConfigRow, String> configValueCol = new TableColumn<>("Value");
+        configValueCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().value));
+        configTable.getColumns().addAll(configParamCol, configValueCol);
+        configTable.setPlaceholder(new Label("No Configuration"));
+        configTable.setPrefHeight(200);
+
+        leftPane.getChildren().addAll(new Label("Program Input:"), programInput, loadTextBtn,
+                new Label("Instruction Queue:"), instructionQueueTable,
+                new Label("Configuration:"), configTable);
         setLeft(leftPane);
 
         // Center: Reservation Stations & Buffers
         centerPane = new VBox(10);
         centerPane.setPadding(new Insets(10));
-        
+
         fpAddTable = createRsTable("FP Add/Sub Stations");
         fpMulTable = createRsTable("FP Mul/Div Stations");
         intTable = createRsTable("Integer Stations");
@@ -130,8 +143,9 @@ public class SimulationView extends BorderPane {
         tabPane.getTabs().add(new Tab("Integer", intTable));
         tabPane.getTabs().add(new Tab("Load Buffers", loadTable));
         tabPane.getTabs().add(new Tab("Store Buffers", storeTable));
-        
-        for(Tab t : tabPane.getTabs()) t.setClosable(false);
+
+        for (Tab t : tabPane.getTabs())
+            t.setClosable(false);
 
         centerPane.getChildren().add(tabPane);
         setCenter(centerPane);
@@ -147,7 +161,8 @@ public class SimulationView extends BorderPane {
         TableColumn<RegisterWrapper, String> regNameCol = new TableColumn<>("Reg");
         regNameCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().name));
         TableColumn<RegisterWrapper, String> regValCol = new TableColumn<>("Value");
-        regValCol.setCellValueFactory(c -> new SimpleStringProperty(String.format("%.2f", c.getValue().register.getValue())));
+        regValCol.setCellValueFactory(
+                c -> new SimpleStringProperty(String.format("%.2f", c.getValue().register.getValue())));
         regValCol.setCellFactory(TextFieldTableCell.forTableColumn());
         regValCol.setOnEditCommit(t -> {
             RegisterWrapper wrapper = t.getRowValue();
@@ -155,20 +170,22 @@ public class SimulationView extends BorderPane {
         });
         TableColumn<RegisterWrapper, String> regQiCol = new TableColumn<>("Qi");
         regQiCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().register.getQi().toString()));
-        
+
         registerTable.getColumns().addAll(regNameCol, regQiCol, regValCol);
-        
+
         // Cache Table
         cacheTable = new TableView<>();
         cacheTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         TableColumn<CacheBlock, String> cacheTagCol = new TableColumn<>("Tag");
         cacheTagCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().getTag())));
-        TableColumn<CacheBlock, String> cacheDataCol = new TableColumn<>("Data");
-        cacheDataCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getDataHex()));
+        TableColumn<CacheBlock, String> cacheDataHexCol = new TableColumn<>("Data (Hex)");
+        cacheDataHexCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getDataHex()));
+        TableColumn<CacheBlock, String> cacheDataDecCol = new TableColumn<>("Data (Decimal)");
+        cacheDataDecCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getDataAsDoubles()));
         TableColumn<CacheBlock, String> cacheDirtyCol = new TableColumn<>("Dirty");
         cacheDirtyCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().isDirty())));
-        
-        cacheTable.getColumns().addAll(cacheTagCol, cacheDirtyCol, cacheDataCol);
+
+        cacheTable.getColumns().addAll(cacheTagCol, cacheDirtyCol, cacheDataHexCol, cacheDataDecCol);
         cacheTable.setPlaceholder(new Label("Cache Empty / Invalid"));
         cacheTable.setPrefHeight(200);
 
@@ -208,7 +225,7 @@ public class SimulationView extends BorderPane {
         memAddrCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().address)));
         TableColumn<MemoryRow, String> memValCol = new TableColumn<>("Value (Double)");
         memValCol.setCellValueFactory(c -> new SimpleStringProperty(String.format("%.4f", c.getValue().value)));
-        
+
         memoryTable.getColumns().addAll(memAddrCol, memValCol);
         memoryTable.setPlaceholder(new Label("Memory Empty (Zeroes)"));
         memoryTable.setPrefHeight(200);
@@ -228,7 +245,7 @@ public class SimulationView extends BorderPane {
             boolean isWord = setWordBtn.isSelected();
             String type = isWord ? "Word Index (8-byte)" : "Byte Address";
             String example = isWord ? "2 50.5 (Sets addr 16)" : "16 127";
-            
+
             TextInputDialog dialog = new TextInputDialog("0 0");
             dialog.setTitle("Set Memory Value");
             dialog.setHeaderText("Enter " + type + " and Value (e.g., " + example + ")");
@@ -264,19 +281,19 @@ public class SimulationView extends BorderPane {
         loadMemBtn.setOnAction(e -> controller.loadMemoryFile());
 
         memoryBox = new VBox(5);
-        memoryBox.getChildren().addAll(new Label("Memory Content (Non-Zero)"), memoryTable, toggleBox, setMemBtn, loadMemBtn);
+        memoryBox.getChildren().addAll(new Label("Memory Content (Non-Zero)"), memoryTable, toggleBox, setMemBtn,
+                loadMemBtn);
 
         rightPane.getChildren().addAll(new Label("Register File"), registerTable, loadRegBtn);
         VBox.setVgrow(registerTable, Priority.ALWAYS);
         setRight(rightPane);
-
 
         // Bottom: Log
         logArea = new TextArea();
         logArea.setEditable(false);
         logArea.setPrefHeight(150);
         setBottom(logArea);
-        
+
         switchCenterView(true);
     }
 
@@ -287,26 +304,26 @@ public class SimulationView extends BorderPane {
             for (Tab t : tabPane.getTabs()) {
                 t.setContent(null);
             }
-            
+
             GridPane grid = new GridPane();
             grid.setHgap(10);
             grid.setVgap(10);
             grid.setPadding(new Insets(10));
-            
+
             // Row 0: FP Add/Sub and FP Mul/Div (Span 3 columns each in a 6-column grid)
             VBox fpAddBox = createTableBox("FP Add/Sub Stations", fpAddTable);
             grid.add(fpAddBox, 0, 0);
             GridPane.setColumnSpan(fpAddBox, 3);
-            
+
             VBox fpMulBox = createTableBox("FP Mul/Div Stations", fpMulTable);
             grid.add(fpMulBox, 3, 0);
             GridPane.setColumnSpan(fpMulBox, 3);
-            
+
             // Row 1: Integer, Store, Load (Span 2 columns each in a 6-column grid)
             VBox intBox = createTableBox("Integer Stations", intTable);
             grid.add(intBox, 0, 1);
             GridPane.setColumnSpan(intBox, 2);
-            
+
             VBox storeBox = createTableBox("Store Buffers", storeTable);
             grid.add(storeBox, 2, 1);
             GridPane.setColumnSpan(storeBox, 2);
@@ -314,7 +331,7 @@ public class SimulationView extends BorderPane {
             VBox loadBox = createTableBox("Load Buffers", loadTable);
             grid.add(loadBox, 4, 1);
             GridPane.setColumnSpan(loadBox, 2);
-            
+
             // Row 2: Cache (Span all 6 columns)
             grid.add(cacheBox, 0, 2);
             GridPane.setColumnSpan(cacheBox, 6);
@@ -322,14 +339,14 @@ public class SimulationView extends BorderPane {
             // Row 3: Memory (Span all 6 columns)
             grid.add(memoryBox, 0, 3);
             GridPane.setColumnSpan(memoryBox, 6);
-            
+
             // Make columns grow equally (16.66% each)
             for (int i = 0; i < 6; i++) {
                 ColumnConstraints col = new ColumnConstraints();
                 col.setPercentWidth(100.0 / 6.0);
                 grid.getColumnConstraints().add(col);
             }
-            
+
             javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(grid);
             scroll.setFitToWidth(true);
             centerPane.getChildren().add(scroll);
@@ -340,7 +357,7 @@ public class SimulationView extends BorderPane {
             tabPane.getTabs().get(2).setContent(intTable);
             tabPane.getTabs().get(3).setContent(loadTable);
             tabPane.getTabs().get(4).setContent(storeTable);
-            
+
             VBox layout = new VBox(10);
             layout.getChildren().addAll(tabPane, cacheBox, memoryBox);
             centerPane.getChildren().add(layout);
@@ -360,7 +377,7 @@ public class SimulationView extends BorderPane {
         table.prefHeightProperty().bind(Bindings.size(table.getItems()).multiply(table.getFixedCellSize()).add(30));
         table.minHeightProperty().bind(table.prefHeightProperty());
         table.maxHeightProperty().bind(table.prefHeightProperty());
-        
+
         TableColumn<ReservationStation, String> tagCol = new TableColumn<>("Tag");
         tagCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getTag().toString()));
 
@@ -368,13 +385,20 @@ public class SimulationView extends BorderPane {
         busyCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().isBusy())));
 
         TableColumn<ReservationStation, String> opCol = new TableColumn<>("Op");
-        opCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getOpcode() != null ? c.getValue().getOpcode().toString() : ""));
+        opCol.setCellValueFactory(c -> new SimpleStringProperty(
+                c.getValue().getOpcode() != null ? c.getValue().getOpcode().toString() : ""));
 
         TableColumn<ReservationStation, String> vjCol = new TableColumn<>("Vj");
         vjCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().getVj())));
 
         TableColumn<ReservationStation, String> vkCol = new TableColumn<>("Vk");
-        vkCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().getVk())));
+        vkCol.setCellValueFactory(c -> {
+            ReservationStation rs = c.getValue();
+            if (rs.getInstruction() != null && rs.getInstruction().isIntArithmetic()) {
+                return new SimpleStringProperty(String.valueOf(rs.getImmediate()));
+            }
+            return new SimpleStringProperty(String.valueOf(rs.getVk()));
+        });
 
         TableColumn<ReservationStation, String> qjCol = new TableColumn<>("Qj");
         qjCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getQj().toString()));
@@ -396,10 +420,10 @@ public class SimulationView extends BorderPane {
 
         TableColumn<LoadBuffer, String> tagCol = new TableColumn<>("Tag");
         tagCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().toString()));
-        
+
         TableColumn<LoadBuffer, String> busyCol = new TableColumn<>("Busy");
         busyCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().isBusy())));
-        
+
         TableColumn<LoadBuffer, String> addrCol = new TableColumn<>("Address");
         addrCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().getEffectiveAddress())));
 
@@ -417,18 +441,19 @@ public class SimulationView extends BorderPane {
 
         TableColumn<StoreBuffer, String> tagCol = new TableColumn<>("Tag");
         tagCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().toString()));
-        
+
         TableColumn<StoreBuffer, String> busyCol = new TableColumn<>("Busy");
         busyCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().isBusy())));
-        
+
         TableColumn<StoreBuffer, String> addrCol = new TableColumn<>("Address");
         addrCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().getEffectiveAddress())));
-        
+
         TableColumn<StoreBuffer, String> valCol = new TableColumn<>("Value");
         valCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().getValueToStore())));
-        
+
         TableColumn<StoreBuffer, String> qCol = new TableColumn<>("Q");
-        qCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().getSourceTag() != null ? c.getValue().getSourceTag().toString() : ""));
+        qCol.setCellValueFactory(c -> new SimpleStringProperty(
+                c.getValue().getSourceTag() != null ? c.getValue().getSourceTag().toString() : ""));
 
         table.getColumns().addAll(tagCol, busyCol, addrCol, valCol, qCol);
         return table;
@@ -436,7 +461,8 @@ public class SimulationView extends BorderPane {
 
     public void updateView() {
         TomasuloSimulator simulator = controller.getSimulator();
-        if (simulator == null) return;
+        if (simulator == null)
+            return;
 
         cycleLabel.setText("Cycle: " + simulator.getCycle());
 
@@ -454,7 +480,7 @@ public class SimulationView extends BorderPane {
 
         storeTable.getItems().setAll(simulator.getStoreBuffers());
         storeTable.refresh();
-        
+
         // Registers
         List<RegisterWrapper> regWrappers = new ArrayList<>();
         RegisterFile rf = simulator.getRegisterFile();
@@ -480,7 +506,7 @@ public class SimulationView extends BorderPane {
         // Memory
         List<MemoryRow> memRows = new ArrayList<>();
         MainMemory mem = simulator.getMainMemory();
-        // Scan memory for non-zero values. 
+        // Scan memory for non-zero values.
         // We step by 8 bytes (double size)
         for (int i = 0; i < mem.getSize(); i += 8) {
             double val = mem.loadDouble(i);
@@ -490,20 +516,85 @@ public class SimulationView extends BorderPane {
         }
         memoryTable.getItems().setAll(memRows);
         memoryTable.refresh();
-        
+
         // Instruction Queue
         instructionQueueTable.getItems().setAll(simulator.getInstructionQueue().toList());
         instructionQueueTable.refresh();
+
+        // Configuration
+        List<ConfigRow> configRows = new ArrayList<>();
+        configRows.add(new ConfigRow("FP Add/Sub RS", String.valueOf(simulator.getFpAddSubStations().size())));
+        configRows.add(new ConfigRow("FP Mul/Div RS", String.valueOf(simulator.getFpMulDivStations().size())));
+        configRows.add(new ConfigRow("Integer RS", String.valueOf(simulator.getIntStations().size())));
+        configRows.add(new ConfigRow("Load Buffers", String.valueOf(simulator.getLoadBuffers().size())));
+        configRows.add(new ConfigRow("Store Buffers", String.valueOf(simulator.getStoreBuffers().size())));
+        configRows.add(new ConfigRow("Cache Size", simulator.getCache().getCacheSize() + " bytes"));
+        configRows.add(new ConfigRow("Block Size", simulator.getCache().getBlockSize() + " bytes"));
+        configRows.add(new ConfigRow("Cache Blocks", String.valueOf(simulator.getCache().getNumBlocks())));
+        configRows.add(new ConfigRow("Hit Latency", simulator.getCache().getHitLatency() + " cycles"));
+        configRows.add(new ConfigRow("Miss Penalty", simulator.getCache().getMissLatency() + " cycles"));
+        configTable.getItems().setAll(configRows);
+        configTable.refresh();
     }
 
     public void log(String msg) {
         logArea.appendText(msg + "\n");
     }
 
+    /**
+     * Format instruction operands for display in the instruction queue
+     */
+    private String formatInstructionOperands(Instruction instr) {
+        StringBuilder sb = new StringBuilder();
+
+        if (instr.isLoad()) {
+            // Load: DEST, OFFSET(BASE)
+            sb.append(formatRegister(instr.getDestReg()));
+            sb.append(", ").append(instr.getOffset());
+            sb.append("(").append(formatRegister(instr.getBaseReg())).append(")");
+        } else if (instr.isStore()) {
+            // Store: SRC, OFFSET(BASE)
+            sb.append(formatRegister(instr.getSrc1Reg()));
+            sb.append(", ").append(instr.getOffset());
+            sb.append("(").append(formatRegister(instr.getBaseReg())).append(")");
+        } else if (instr.isIntArithmetic()) {
+            // Integer arithmetic: DEST, SRC1, IMMEDIATE
+            sb.append(formatRegister(instr.getDestReg()));
+            sb.append(", ").append(formatRegister(instr.getSrc1Reg()));
+            sb.append(", ").append(instr.getImmediate());
+        } else if (instr.isBranch()) {
+            // Branch: SRC1, SRC2, OFFSET
+            sb.append(formatRegister(instr.getSrc1Reg()));
+            sb.append(", ").append(formatRegister(instr.getSrc2Reg()));
+            sb.append(", ").append(instr.getImmediate());
+        } else {
+            // FP arithmetic: DEST, SRC1, SRC2
+            sb.append(formatRegister(instr.getDestReg()));
+            sb.append(", ").append(formatRegister(instr.getSrc1Reg()));
+            sb.append(", ").append(formatRegister(instr.getSrc2Reg()));
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * Format register index as R# or F# depending on whether it's INT or FP
+     */
+    private String formatRegister(int regIndex) {
+        if (regIndex < 0)
+            return "-";
+        if (regIndex >= 32) {
+            return "F" + (regIndex - 32);
+        } else {
+            return "R" + regIndex;
+        }
+    }
+
     // Helper class for Register Table
     public static class RegisterWrapper {
         public String name;
         public Register register;
+
         public RegisterWrapper(String name, Register register) {
             this.name = name;
             this.register = register;
@@ -513,8 +604,19 @@ public class SimulationView extends BorderPane {
     public static class MemoryRow {
         public int address;
         public double value;
+
         public MemoryRow(int address, double value) {
             this.address = address;
+            this.value = value;
+        }
+    }
+
+    public static class ConfigRow {
+        public String parameter;
+        public String value;
+
+        public ConfigRow(String parameter, String value) {
+            this.parameter = parameter;
             this.value = value;
         }
     }

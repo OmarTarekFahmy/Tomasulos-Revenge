@@ -20,9 +20,9 @@ public class ConfigController {
 
     public void startSimulation(
             TextField intAluLatency, TextField fpAddSubLatency, TextField fpMulLatency, TextField fpDivLatency,
-            TextField numIntRs, TextField numFpAddRs, TextField numFpMulRs, TextField numLoadBuffers, TextField numStoreBuffers,
-            TextField cacheSize, TextField blockSize, TextField cacheHitLatency, TextField cacheMissPenalty
-    ) {
+            TextField numIntRs, TextField numFpAddRs, TextField numFpMulRs, TextField numLoadBuffers,
+            TextField numStoreBuffers,
+            TextField cacheSize, TextField blockSize, TextField cacheHitLatency, TextField cacheMissPenalty) {
         try {
             TomasuloSimulator.Config config = new TomasuloSimulator.Config();
 
@@ -42,8 +42,10 @@ public class ConfigController {
             config.cacheHitLatency = Integer.parseInt(cacheHitLatency.getText());
             config.cacheMissPenalty = Integer.parseInt(cacheMissPenalty.getText());
 
-            if (config.numIntRs < 1 || config.numFpAddSubRs < 1 || config.numFpMulDivRs < 1 || 
-                config.numLoadBuffers < 1 || config.numStoreBuffers < 1) {
+            config.memorySize = 1024; // 1KB memory
+
+            if (config.numIntRs < 1 || config.numFpAddSubRs < 1 || config.numFpMulDivRs < 1 ||
+                    config.numLoadBuffers < 1 || config.numStoreBuffers < 1) {
                 throw new NumberFormatException("Counts must be positive");
             }
 
@@ -52,7 +54,7 @@ public class ConfigController {
             SimulationController simController = new SimulationController(stage, config);
             SimulationView simView = new SimulationView(simController);
             simController.setView(simView); // Link view back to controller if needed, or just pass controller to view
-            
+
             // Initialize with empty program to show structure
             simController.initSimulator(new ArrayList<>());
 
