@@ -140,11 +140,8 @@ public class TomasuloSimulator {
 
         // Initialize memory hierarchy
         this.mainMemory = new MainMemory(config.memorySize);
-        mainMemory.storeDouble(0, 8);
-        mainMemory.storeDouble(8, 6);
-        mainMemory.storeDouble(16, 4);
-        mainMemory.storeDouble(24, 2);
-        mainMemory.storeDouble(32, 1);
+        mainMemory.storeFloat(0, (float) 8.5);
+        mainMemory.storeFloat(20, (float) 2.5);
         this.cache = new Cache(cacheSize, blockSize, cacheHitLatency, cacheMissPenalty, mainMemory);
 
         // Load program into IQ
@@ -816,7 +813,8 @@ public class TomasuloSimulator {
             int offset = instr.getOffset();
             int effectiveAddress = registerFile.get(base).getIntValue() + offset;
 
-            // Check memory ordering: stores must wait for all previous loads AND stores with same EA
+            // Check memory ordering: stores must wait for all previous loads AND stores
+            // with same EA
             for (LoadBuffer lb : loadBuffers) {
                 if (!lb.isFree() && lb.getEffectiveAddress() == effectiveAddress) {
                     log("[ISSUE] Stall: store at EA=" + effectiveAddress + " waiting for load " + lb.getTag());
@@ -1111,6 +1109,14 @@ public class TomasuloSimulator {
      */
     public void setMemoryWord(int address, int value) {
         mainMemory.storeWord(address, value);
+    }
+
+    public void setMemoryFloat(int address, float value) {
+        mainMemory.storeFloat(address, value);
+    }
+
+    public void setMemoryLong(int address, long value) {
+        mainMemory.storeLong(address, value);
     }
 
     // --- Main entry point for testing ---

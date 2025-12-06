@@ -25,7 +25,7 @@ public class InstructionParser {
         return lines;
     }
 
-    private static Instruction parseLine(String line, HashMap<String, Integer> labels, int lineNumber) {
+    private static Instruction parseLine(String line, HashMap<String, Integer> labels) {
 
         // Split by whitespace and commas
         String[] tokens = line.split("[\\s,]+");
@@ -36,7 +36,6 @@ public class InstructionParser {
         int baseReg = -1, offset = 0, immediate = 0;
 
         if (tokens[0].contains(":")) {
-            labels.put(tokens[0].replace(":", ""), lineNumber); // Placeholder address
             tokens = java.util.Arrays.copyOfRange(tokens, 1, tokens.length); // Skip label for further parsing
             opStr = tokens[0].toUpperCase();
         }
@@ -259,9 +258,19 @@ public class InstructionParser {
 
         HashMap<String, Integer> labels = new HashMap<>();
 
-        int i = 0;
+        int lineNumber = 0;
         for (String line : lines) {
-            Instruction instr = parseLine(line, labels, i++);
+            String[] tokens = line.split("[\\s,]+");
+            if (tokens[0].contains(":")) {
+                labels.put(tokens[0].replace(":", ""), lineNumber); // Placeholder address
+
+            }
+            lineNumber++;
+
+        }
+
+        for (String line : lines) {
+            Instruction instr = parseLine(line, labels);
             if (instr != null) {
                 instructions.add(instr);
             }

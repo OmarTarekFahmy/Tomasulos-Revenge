@@ -47,7 +47,8 @@ public class SimulationController {
     }
 
     public void loadProgramText(String text) {
-        if (text.isEmpty()) return;
+        if (text.isEmpty())
+            return;
 
         try {
             File temp = File.createTempFile("tomasulo_prog", ".txt");
@@ -76,7 +77,8 @@ public class SimulationController {
             // Preserve register values
             for (int i = 0; i < oldRegs.size(); i++) {
                 simulator.getRegisterFile().get(i).setValue(oldRegs.get(i).getValue());
-                // Note: We don't preserve Qi because a new program implies a fresh start for dependencies
+                // Note: We don't preserve Qi because a new program implies a fresh start for
+                // dependencies
             }
             view.log("Preserved register values from previous session.");
         }
@@ -101,6 +103,22 @@ public class SimulationController {
         }
     }
 
+    public void setMemoryFloat(int address, float value) {
+        if (simulator != null) {
+            simulator.setMemoryFloat(address, value);
+            view.updateView();
+            view.log("Memory[" + address + "] set to float " + value);
+        }
+    }
+
+    public void setMemoryLong(int address, long value) {
+        if (simulator != null) {
+            simulator.setMemoryLong(address, value);
+            view.updateView();
+            view.log("Memory[" + address + "] set to long " + value);
+        }
+    }
+
     public void setMemoryByte(int address, byte value) {
         if (simulator != null) {
             simulator.setMemoryByte(address, value);
@@ -110,11 +128,12 @@ public class SimulationController {
     }
 
     public void step() {
-        if (simulator == null) return;
+        if (simulator == null)
+            return;
         if (!simulator.isFinished()) {
             simulator.step();
             view.updateView();
-            
+
             // Append all logs from this cycle
             for (String logMsg : simulator.getCycleLog()) {
                 view.log(logMsg);
@@ -125,7 +144,8 @@ public class SimulationController {
     }
 
     public void runAll() {
-        if (simulator == null) return;
+        if (simulator == null)
+            return;
         // TODO: Run in a background thread to avoid freezing UI for long simulations
         while (!simulator.isFinished()) {
             simulator.step();
@@ -143,9 +163,9 @@ public class SimulationController {
             view.log("Simulator not initialized. Load a program first.");
             return;
         }
-        
+
         regName = regName.toUpperCase();
-        
+
         try {
             int regIdx = -1;
             if (regName.startsWith("R")) {
@@ -158,7 +178,7 @@ public class SimulationController {
                     view.log("Error: R0 cannot be modified.");
                     return;
                 }
-                
+
                 // Validate integer value
                 try {
                     int val = Integer.parseInt(valueStr);
@@ -168,14 +188,14 @@ public class SimulationController {
                 } catch (NumberFormatException e) {
                     view.log("Error: Integer register " + regName + " requires an integer value.");
                 }
-                
+
             } else if (regName.startsWith("F")) {
                 regIdx = Integer.parseInt(regName.substring(1));
                 if (regIdx < 0 || regIdx >= 32) {
                     view.log("Invalid FP register index: " + regName);
                     return;
                 }
-                
+
                 try {
                     double val = Double.parseDouble(valueStr);
                     simulator.getRegisterFile().get(regIdx + 32).setValue(val);
@@ -240,7 +260,8 @@ public class SimulationController {
 
     private void parseMemoryLine(String line) {
         line = line.trim();
-        if (line.isEmpty() || line.startsWith("#") || line.startsWith("//")) return;
+        if (line.isEmpty() || line.startsWith("#") || line.startsWith("//"))
+            return;
 
         String[] parts = line.split("\\s+");
         if (parts.length != 2) {
@@ -259,7 +280,8 @@ public class SimulationController {
 
     private void parseRegisterLine(String line) {
         line = line.trim();
-        if (line.isEmpty() || line.startsWith("#") || line.startsWith("//")) return;
+        if (line.isEmpty() || line.startsWith("#") || line.startsWith("//"))
+            return;
 
         String[] parts = line.split("\\s+");
         if (parts.length != 2) {
@@ -274,8 +296,8 @@ public class SimulationController {
             if (regName.startsWith("R")) {
                 int regIdx = Integer.parseInt(regName.substring(1));
                 if (regIdx < 0 || regIdx >= 32) {
-                     view.log("Invalid integer register index: " + regName);
-                     return;
+                    view.log("Invalid integer register index: " + regName);
+                    return;
                 }
                 // Validation: must be integer
                 try {
@@ -287,9 +309,9 @@ public class SimulationController {
                 }
             } else if (regName.startsWith("F")) {
                 int regIdx = Integer.parseInt(regName.substring(1));
-                 if (regIdx < 0 || regIdx >= 32) {
-                     view.log("Invalid FP register index: " + regName);
-                     return;
+                if (regIdx < 0 || regIdx >= 32) {
+                    view.log("Invalid FP register index: " + regName);
+                    return;
                 }
                 // Validation: can be double
                 try {
@@ -298,7 +320,7 @@ public class SimulationController {
                     simulator.getRegisterFile().get(regIdx + 32).setValue(val);
                     simulator.getRegisterFile().get(regIdx + 32).setQi(com.tomasulo.core.Tag.NONE);
                 } catch (NumberFormatException e) {
-                     view.log("Error: Invalid number format for " + regName + ": " + valueStr);
+                    view.log("Error: Invalid number format for " + regName + ": " + valueStr);
                 }
             } else {
                 view.log("Unknown register type: " + regName);
@@ -321,7 +343,7 @@ public class SimulationController {
             // We use storeDouble to write to memory/cache
             // This will handle cache hit/miss logic and update the cache block
             simulator.getCache().storeDouble(address, value);
-            
+
             view.updateView();
             view.log("Set memory[" + address + "] = " + value);
         } catch (NumberFormatException e) {

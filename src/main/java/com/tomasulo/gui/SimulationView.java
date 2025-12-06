@@ -251,34 +251,88 @@ public class SimulationView extends BorderPane {
         Button setMemBtn = new Button("Set Memory Value");
         setMemBtn.setMaxWidth(Double.MAX_VALUE);
         setMemBtn.setOnAction(e -> {
-            boolean isDouble = viewDoubleBtn.isSelected();
-            String type = isDouble ? "Double Word Index (8-byte)" : "Word Index (4-byte)";
-            String example = isDouble ? "2 50.5 (Sets addr 16)" : "4 100 (Sets addr 16)";
+            boolean is8Byte = viewDoubleBtn.isSelected();
 
-            TextInputDialog dialog = new TextInputDialog("0 0");
+            // Create custom dialog with toggle options
+            javafx.scene.control.Dialog<String> dialog = new javafx.scene.control.Dialog<>();
             dialog.setTitle("Set Memory Value");
-            dialog.setHeaderText("Enter " + type + " and Value (e.g., " + example + ")");
+            dialog.setHeaderText("Enter Word Index and Value");
+
+            // Create toggle group for data type selection
+            RadioButton doubleBtn = new RadioButton("Double (8 bytes)");
+            RadioButton longBtn = new RadioButton("Long (8 bytes)");
+            RadioButton floatBtn = new RadioButton("Float (4 bytes)");
+            RadioButton wordBtn = new RadioButton("Word (4 bytes)");
+
+            ToggleGroup typeGroup = new ToggleGroup();
+            doubleBtn.setToggleGroup(typeGroup);
+            longBtn.setToggleGroup(typeGroup);
+            floatBtn.setToggleGroup(typeGroup);
+            wordBtn.setToggleGroup(typeGroup);
+
+            // Set default selection based on current view mode
+            if (is8Byte) {
+                doubleBtn.setSelected(true);
+            } else {
+                floatBtn.setSelected(true);
+            }
+
+            // Input fields
+            javafx.scene.control.TextField indexField = new javafx.scene.control.TextField("0");
+            indexField.setPromptText("Word Index");
+            javafx.scene.control.TextField valueField = new javafx.scene.control.TextField("0");
+            valueField.setPromptText("Value");
+
+            // Layout
+            VBox typeBox = new VBox(5, new Label("Data Type:"), doubleBtn, longBtn, floatBtn, wordBtn);
+            VBox inputBox = new VBox(5, new Label("Word Index:"), indexField, new Label("Value:"), valueField);
+            VBox content = new VBox(10, typeBox, inputBox);
+            content.setPadding(new Insets(10));
+
+            dialog.getDialogPane().setContent(content);
+            dialog.getDialogPane().getButtonTypes().addAll(
+                    javafx.scene.control.ButtonType.OK,
+                    javafx.scene.control.ButtonType.CANCEL);
+
+            dialog.setResultConverter(buttonType -> {
+                if (buttonType == javafx.scene.control.ButtonType.OK) {
+                    return indexField.getText() + " " + valueField.getText();
+                }
+                return null;
+            });
+
             dialog.showAndWait().ifPresent(result -> {
                 String[] parts = result.trim().split("\\s+");
                 if (parts.length == 2) {
                     try {
                         int inputAddr = Integer.parseInt(parts[0]);
-                        if (isDouble) {
+
+                        if (doubleBtn.isSelected()) {
+                            // Double (8 bytes)
                             double val = Double.parseDouble(parts[1]);
-                            // Convert word index to byte address
                             int byteAddress = inputAddr * 8;
                             controller.setMemoryValue(byteAddress, val);
-                        } else {
+                        } else if (longBtn.isSelected()) {
+                            // Long (8 bytes)
+                            long val = Long.parseLong(parts[1]);
+                            int byteAddress = inputAddr * 8;
+                            controller.setMemoryLong(byteAddress, val);
+                        } else if (floatBtn.isSelected()) {
+                            // Float (4 bytes)
+                            float val = Float.parseFloat(parts[1]);
+                            int byteAddress = inputAddr * 4;
+                            controller.setMemoryFloat(byteAddress, val);
+                        } else if (wordBtn.isSelected()) {
                             // Word (4 bytes)
                             int val = Integer.parseInt(parts[1]);
                             int byteAddress = inputAddr * 4;
                             controller.setMemoryWord(byteAddress, val);
                         }
                     } catch (NumberFormatException ex) {
-                        log("Invalid format. Address must be integer, Value must be number.");
+                        log("Invalid format. Address must be integer, Value must match selected type.");
                     }
                 } else {
-                    log("Invalid format. Use: ADDRESS VALUE");
+                    log("Invalid format. Use: INDEX VALUE");
                 }
             });
         });
@@ -299,13 +353,13 @@ public class SimulationView extends BorderPane {
         logArea = new TextArea();
         logArea.setEditable(false);
         logArea.setPrefHeight(150);
-        
+
         // Use SplitPane for resizable log area
         SplitPane splitPane = new SplitPane();
         splitPane.setOrientation(Orientation.VERTICAL);
         splitPane.getItems().addAll(centerPane, logArea);
         splitPane.setDividerPositions(0.8);
-        
+
         setCenter(splitPane);
 
         switchCenterView(true);
@@ -520,7 +574,7 @@ public class SimulationView extends BorderPane {
         // Memory
         List<MemoryRow> memRows = new ArrayList<>();
         MainMemory mem = simulator.getMainMemory();
-        
+
         if (viewDoubleBtn.isSelected()) {
             // Double Word (8 bytes)
             for (int i = 0; i < mem.getSize(); i += 8) {
@@ -532,16 +586,17 @@ public class SimulationView extends BorderPane {
                 }
             }
         } else {
-            // Word (4 bytes)
+            // Word (4 bytes) - displayed as float
             for (int i = 0; i < mem.getSize(); i += 4) {
-                int val = mem.loadWord(i);
+                float val = mem.loadFloat(i);
                 if (val != 0) {
-                    String hex = String.format("0x%08X", val);
-                    memRows.add(new MemoryRow(i, String.valueOf(val), hex));
+                    int bits = Float.floatToIntBits(val);
+                    String hex = String.format("0x%08X", bits);
+                    memRows.add(new MemoryRow(i, String.format("%.4f", val), hex));
                 }
             }
         }
-        
+
         memoryTable.getItems().setAll(memRows);
         memoryTable.refresh();
 
