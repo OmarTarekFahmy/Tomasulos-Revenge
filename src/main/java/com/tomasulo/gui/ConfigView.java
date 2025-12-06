@@ -1,9 +1,16 @@
 package com.tomasulo.gui;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.List;
+
 import com.tomasulo.gui.controller.ConfigController;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
@@ -11,6 +18,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
+import javafx.stage.FileChooser;
 
 public class ConfigView extends BorderPane {
 
@@ -86,6 +94,10 @@ public class ConfigView extends BorderPane {
         scrollPane.setStyle("-fx-background-color:transparent;");
         setCenter(scrollPane);
 
+        Button loadConfigButton = new Button("Load Configuration");
+        loadConfigButton.setMaxWidth(Double.MAX_VALUE);
+        loadConfigButton.setOnAction(e -> loadConfiguration());
+
         Button startButton = new Button("Start Simulation");
         startButton.setMaxWidth(Double.MAX_VALUE);
         startButton.setOnAction(e -> controller.startSimulation(
@@ -94,7 +106,7 @@ public class ConfigView extends BorderPane {
             cacheSize, blockSize, cacheHitLatency, cacheMissPenalty, memorySize
         ));
 
-        VBox bottomBox = new VBox(startButton);
+        VBox bottomBox = new VBox(10, loadConfigButton, startButton);
         bottomBox.setPadding(new Insets(20, 0, 0, 0));
         setBottom(bottomBox);
     }
@@ -108,6 +120,53 @@ public class ConfigView extends BorderPane {
     private void addInput(GridPane grid, String label, TextField field, int row) {
         grid.add(new Label(label), 0, row);
         grid.add(field, 1, row);
+    }
+
+    private void loadConfiguration() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Open Configuration File");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text Files", "*.txt"));
+        fileChooser.setInitialDirectory(new File(System.getProperty("user.dir")));
+        File file = fileChooser.showOpenDialog(getScene().getWindow());
+
+        if (file != null) {
+            try {
+                List<String> lines = Files.readAllLines(file.toPath());
+                for (String line : lines) {
+                    String[] parts = line.split("=");
+                    if (parts.length == 2) {
+                        String key = parts[0].trim();
+                        String value = parts[1].trim();
+                        updateField(key, value);
+                    }
+                }
+            } catch (IOException e) {
+                Alert alert = new Alert(AlertType.ERROR);
+                alert.setTitle("Error");
+                alert.setHeaderText("Could not load configuration");
+                alert.setContentText(e.getMessage());
+                alert.showAndWait();
+            }
+        }
+    }
+
+    private void updateField(String key, String value) {
+        switch (key) {
+            case "intAluLatency": intAluLatency.setText(value); break;
+            case "fpAddSubLatency": fpAddSubLatency.setText(value); break;
+            case "fpMulLatency": fpMulLatency.setText(value); break;
+            case "fpDivLatency": fpDivLatency.setText(value); break;
+            case "numIntRs": numIntRs.setText(value); break;
+            case "numFpAddRs": numFpAddRs.setText(value); break;
+            case "numFpMulRs": numFpMulRs.setText(value); break;
+            case "numLoadBuffers": numLoadBuffers.setText(value); break;
+            case "numStoreBuffers": numStoreBuffers.setText(value); break;
+            case "cacheSize": cacheSize.setText(value); break;
+            case "blockSize": blockSize.setText(value); break;
+            case "cacheHitLatency": cacheHitLatency.setText(value); break;
+            case "cacheMissPenalty": cacheMissPenalty.setText(value); break;
+            case "memorySize": memorySize.setText(value); break;
+        }
     }
 }
 
