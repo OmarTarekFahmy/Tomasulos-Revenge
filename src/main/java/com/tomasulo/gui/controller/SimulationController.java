@@ -93,6 +93,14 @@ public class SimulationController {
         }
     }
 
+    public void setMemoryWord(int address, int value) {
+        if (simulator != null) {
+            simulator.setMemoryWord(address, value);
+            view.updateView();
+            view.log("Memory[" + address + "] set to word " + value);
+        }
+    }
+
     public void setMemoryByte(int address, byte value) {
         if (simulator != null) {
             simulator.setMemoryByte(address, value);

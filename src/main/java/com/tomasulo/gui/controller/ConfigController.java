@@ -22,7 +22,8 @@ public class ConfigController {
             TextField intAluLatency, TextField fpAddSubLatency, TextField fpMulLatency, TextField fpDivLatency,
             TextField numIntRs, TextField numFpAddRs, TextField numFpMulRs, TextField numLoadBuffers,
             TextField numStoreBuffers,
-            TextField cacheSize, TextField blockSize, TextField cacheHitLatency, TextField cacheMissPenalty) {
+            TextField cacheSize, TextField blockSize, TextField cacheHitLatency, TextField cacheMissPenalty,
+            TextField memorySize) {
         try {
             TomasuloSimulator.Config config = new TomasuloSimulator.Config();
 
@@ -42,7 +43,7 @@ public class ConfigController {
             config.cacheHitLatency = Integer.parseInt(cacheHitLatency.getText());
             config.cacheMissPenalty = Integer.parseInt(cacheMissPenalty.getText());
 
-            config.memorySize = 1024; // 1KB memory
+            config.memorySize = Integer.parseInt(memorySize.getText());
 
             if (config.numIntRs < 1 || config.numFpAddSubRs < 1 || config.numFpMulDivRs < 1 ||
                     config.numLoadBuffers < 1 || config.numStoreBuffers < 1) {

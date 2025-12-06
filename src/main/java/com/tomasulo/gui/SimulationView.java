@@ -20,6 +20,8 @@ import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
+import javafx.scene.control.SplitPane;
+import javafx.geometry.Orientation;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
 import javafx.scene.control.TableColumn;
@@ -54,6 +56,8 @@ public class SimulationView extends BorderPane {
     private VBox cacheBox;
     private TableView<MemoryRow> memoryTable;
     private VBox memoryBox;
+    private RadioButton viewDoubleBtn;
+    private RadioButton viewWordBtn;
     private TableView<Instruction> instructionQueueTable;
     private TableView<ConfigRow> configTable;
 
@@ -148,7 +152,7 @@ public class SimulationView extends BorderPane {
             t.setClosable(false);
 
         centerPane.getChildren().add(tabPane);
-        setCenter(centerPane);
+        // setCenter(centerPane); // Moved to SplitPane setup
 
         // Right: Registers & Memory
         VBox rightPane = new VBox(10);
@@ -223,28 +227,33 @@ public class SimulationView extends BorderPane {
         memoryTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         TableColumn<MemoryRow, String> memAddrCol = new TableColumn<>("Address");
         memAddrCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().address)));
-        TableColumn<MemoryRow, String> memValCol = new TableColumn<>("Value (Double)");
-        memValCol.setCellValueFactory(c -> new SimpleStringProperty(String.format("%.4f", c.getValue().value)));
+        TableColumn<MemoryRow, String> memHexCol = new TableColumn<>("Hex");
+        memHexCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().hex));
+        TableColumn<MemoryRow, String> memValCol = new TableColumn<>("Value");
+        memValCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().value));
 
-        memoryTable.getColumns().addAll(memAddrCol, memValCol);
+        memoryTable.getColumns().addAll(memAddrCol, memHexCol, memValCol);
         memoryTable.setPlaceholder(new Label("Memory Empty (Zeroes)"));
         memoryTable.setPrefHeight(200);
 
-        RadioButton setWordBtn = new RadioButton("Set Word (8 bytes)");
-        RadioButton setByteBtn = new RadioButton("Set Byte");
+        viewDoubleBtn = new RadioButton("Double Word (8 bytes)");
+        viewWordBtn = new RadioButton("Word (4 bytes)");
         ToggleGroup group = new ToggleGroup();
-        setWordBtn.setToggleGroup(group);
-        setByteBtn.setToggleGroup(group);
-        setWordBtn.setSelected(true);
+        viewDoubleBtn.setToggleGroup(group);
+        viewWordBtn.setToggleGroup(group);
+        viewDoubleBtn.setSelected(true);
 
-        HBox toggleBox = new HBox(10, setWordBtn, setByteBtn);
+        // Refresh view when toggle changes
+        group.selectedToggleProperty().addListener((obs, oldVal, newVal) -> updateView());
+
+        HBox toggleBox = new HBox(10, viewDoubleBtn, viewWordBtn);
 
         Button setMemBtn = new Button("Set Memory Value");
         setMemBtn.setMaxWidth(Double.MAX_VALUE);
         setMemBtn.setOnAction(e -> {
-            boolean isWord = setWordBtn.isSelected();
-            String type = isWord ? "Word Index (8-byte)" : "Byte Address";
-            String example = isWord ? "2 50.5 (Sets addr 16)" : "16 127";
+            boolean isDouble = viewDoubleBtn.isSelected();
+            String type = isDouble ? "Double Word Index (8-byte)" : "Word Index (4-byte)";
+            String example = isDouble ? "2 50.5 (Sets addr 16)" : "4 100 (Sets addr 16)";
 
             TextInputDialog dialog = new TextInputDialog("0 0");
             dialog.setTitle("Set Memory Value");
@@ -254,18 +263,16 @@ public class SimulationView extends BorderPane {
                 if (parts.length == 2) {
                     try {
                         int inputAddr = Integer.parseInt(parts[0]);
-                        if (isWord) {
+                        if (isDouble) {
                             double val = Double.parseDouble(parts[1]);
                             // Convert word index to byte address
                             int byteAddress = inputAddr * 8;
                             controller.setMemoryValue(byteAddress, val);
                         } else {
-                            // Byte
-                            int valInt = Integer.parseInt(parts[1]);
-                            if (valInt < -128 || valInt > 127) {
-                                log("Warning: Byte value out of range (-128 to 127). Casting will occur.");
-                            }
-                            controller.setMemoryByte(inputAddr, (byte) valInt);
+                            // Word (4 bytes)
+                            int val = Integer.parseInt(parts[1]);
+                            int byteAddress = inputAddr * 4;
+                            controller.setMemoryWord(byteAddress, val);
                         }
                     } catch (NumberFormatException ex) {
                         log("Invalid format. Address must be integer, Value must be number.");
@@ -292,7 +299,14 @@ public class SimulationView extends BorderPane {
         logArea = new TextArea();
         logArea.setEditable(false);
         logArea.setPrefHeight(150);
-        setBottom(logArea);
+        
+        // Use SplitPane for resizable log area
+        SplitPane splitPane = new SplitPane();
+        splitPane.setOrientation(Orientation.VERTICAL);
+        splitPane.getItems().addAll(centerPane, logArea);
+        splitPane.setDividerPositions(0.8);
+        
+        setCenter(splitPane);
 
         switchCenterView(true);
     }
@@ -506,14 +520,28 @@ public class SimulationView extends BorderPane {
         // Memory
         List<MemoryRow> memRows = new ArrayList<>();
         MainMemory mem = simulator.getMainMemory();
-        // Scan memory for non-zero values.
-        // We step by 8 bytes (double size)
-        for (int i = 0; i < mem.getSize(); i += 8) {
-            double val = mem.loadDouble(i);
-            if (val != 0) {
-                memRows.add(new MemoryRow(i, val));
+        
+        if (viewDoubleBtn.isSelected()) {
+            // Double Word (8 bytes)
+            for (int i = 0; i < mem.getSize(); i += 8) {
+                double val = mem.loadDouble(i);
+                if (val != 0) {
+                    long bits = Double.doubleToLongBits(val);
+                    String hex = String.format("0x%016X", bits);
+                    memRows.add(new MemoryRow(i, String.format("%.4f", val), hex));
+                }
+            }
+        } else {
+            // Word (4 bytes)
+            for (int i = 0; i < mem.getSize(); i += 4) {
+                int val = mem.loadWord(i);
+                if (val != 0) {
+                    String hex = String.format("0x%08X", val);
+                    memRows.add(new MemoryRow(i, String.valueOf(val), hex));
+                }
             }
         }
+        
         memoryTable.getItems().setAll(memRows);
         memoryTable.refresh();
 
@@ -603,11 +631,13 @@ public class SimulationView extends BorderPane {
 
     public static class MemoryRow {
         public int address;
-        public double value;
+        public String value;
+        public String hex;
 
-        public MemoryRow(int address, double value) {
+        public MemoryRow(int address, String value, String hex) {
             this.address = address;
             this.value = value;
+            this.hex = hex;
         }
     }
 

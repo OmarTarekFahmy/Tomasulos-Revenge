@@ -12,7 +12,7 @@ public class MainApp extends Application {
     public void start(Stage primaryStage) {
         ConfigController controller = new ConfigController(primaryStage);
         ConfigView configView = new ConfigView(controller);
-        Scene scene = new Scene(configView, 400, 700);
+        Scene scene = new Scene(configView, 400, 750);
         
         primaryStage.setTitle("Tomasulo Simulator - Configuration");
         primaryStage.setScene(scene);

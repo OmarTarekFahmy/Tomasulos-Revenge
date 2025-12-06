@@ -34,6 +34,9 @@ public class ConfigView extends BorderPane {
     private final TextField cacheHitLatency = new TextField("1");
     private final TextField cacheMissPenalty = new TextField("10");
 
+    // Memory
+    private final TextField memorySize = new TextField("1024");
+
     public ConfigView(ConfigController controller) {
         this.controller = controller;
         setPadding(new Insets(20));
@@ -74,6 +77,10 @@ public class ConfigView extends BorderPane {
         addInput(grid, "Hit Latency:", cacheHitLatency, row++);
         addInput(grid, "Miss Penalty:", cacheMissPenalty, row++);
 
+        // Memory
+        addSection(grid, "Memory Configuration", row++);
+        addInput(grid, "Memory Size (bytes):", memorySize, row++);
+
         ScrollPane scrollPane = new ScrollPane(grid);
         scrollPane.setFitToWidth(true);
         scrollPane.setStyle("-fx-background-color:transparent;");
@@ -84,7 +91,7 @@ public class ConfigView extends BorderPane {
         startButton.setOnAction(e -> controller.startSimulation(
             intAluLatency, fpAddSubLatency, fpMulLatency, fpDivLatency,
             numIntRs, numFpAddRs, numFpMulRs, numLoadBuffers, numStoreBuffers,
-            cacheSize, blockSize, cacheHitLatency, cacheMissPenalty
+            cacheSize, blockSize, cacheHitLatency, cacheMissPenalty, memorySize
         ));
 
         VBox bottomBox = new VBox(startButton);
