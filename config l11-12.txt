@@ -1,0 +1,14 @@
+intAluLatency=1
+fpAddSubLatency=2
+fpMulLatency=10
+fpDivLatency=40
+numIntRs=3
+numFpAddRs=3
+numFpMulRs=2
+numLoadBuffers=3
+numStoreBuffers=3
+cacheSize=1024
+blockSize=64
+cacheHitLatency=2
+cacheMissPenalty=0
+memorySize=1024
