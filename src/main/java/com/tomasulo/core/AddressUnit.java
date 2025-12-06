@@ -58,11 +58,13 @@ public class AddressUnit {
     public static boolean canLoadGoToMemory(LoadBuffer load,
             List<StoreBuffer> stores) {
         for (StoreBuffer sb : stores) {
-            if (!sb.isFree()
-                    && sb.getSequenceNumber() < load.getSequenceNumber()
-                    && sb.getEffectiveAddress() == load.getEffectiveAddress()
-                    && sb.getState() != StoreBuffer.State.FREE) {
-                return false;
+            if (!sb.isFree() && sb.getSequenceNumber() < load.getSequenceNumber()) {
+                if (!sb.isAddressReady()) {
+                    return false;
+                }
+                if (sb.getEffectiveAddress() == load.getEffectiveAddress()) {
+                    return false;
+                }
             }
         }
         return true;
@@ -77,16 +79,24 @@ public class AddressUnit {
         for (StoreBuffer sb : stores) {
             if (!sb.isFree()
                     && sb.getSequenceNumber() < store.getSequenceNumber()
-                    && sb.getEffectiveAddress() == store.getEffectiveAddress()
                     && sb != store) {
-                return false;
+                if (!sb.isAddressReady()) {
+                    return false;
+                }
+                if (sb.getEffectiveAddress() == store.getEffectiveAddress()) {
+                    return false;
+                }
             }
         }
         for (LoadBuffer lb : loads) {
             if (!lb.isFree()
-                    && lb.getSequenceNumber() < store.getSequenceNumber()
-                    && lb.getEffectiveAddress() == store.getEffectiveAddress()) {
-                return false;
+                    && lb.getSequenceNumber() < store.getSequenceNumber()) {
+                if (!lb.isAddressReady()) {
+                    return false;
+                }
+                if (lb.getEffectiveAddress() == store.getEffectiveAddress()) {
+                    return false;
+                }
             }
         }
         return true;

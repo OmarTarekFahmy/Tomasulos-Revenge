@@ -758,6 +758,25 @@ public class TomasuloSimulator {
         Opcode op = instr.getOpcode();
 
         if (instr.isLoad()) {
+            // Check base register availability - must be ready to compute EA
+            int base = instr.getBaseReg();
+            if (registerFile.get(base).getQi() != Tag.NONE) {
+                log("[ISSUE] Stall: base register " + base + " not ready for " + op);
+                return;
+            }
+
+            // Compute effective address immediately
+            int offset = instr.getOffset();
+            int effectiveAddress = registerFile.get(base).getIntValue() + offset;
+
+            // Check memory ordering: loads must wait for all previous stores with same EA
+            for (StoreBuffer sb : storeBuffers) {
+                if (!sb.isFree() && sb.getEffectiveAddress() == effectiveAddress) {
+                    log("[ISSUE] Stall: load at EA=" + effectiveAddress + " waiting for store " + sb.getTag());
+                    return;
+                }
+            }
+
             // find free load buffer
             LoadBuffer lb = findFreeLoadBuffer();
             if (lb == null) {
@@ -765,29 +784,20 @@ public class TomasuloSimulator {
                 return;
             }
 
-            // Find free address unit
-            AddressUnit au = findFreeAddressUnit();
-            if (au == null) {
-                log("[ISSUE] Stall: no free AddressUnit for " + op);
-                return;
-            }
-
             long seq = nextSeqNum();
 
-            // Determine latency based on cache hit/miss (estimate with base reg value)
-            int base = instr.getBaseReg();
-            int offset = instr.getOffset();
-            long estimatedEa = (long) registerFile.get(base).getIntValue() + offset;
-            int accessLatency = cache.getAccessLatency((int) estimatedEa);
+            // Determine latency based on cache hit/miss
+            int accessLatency = cache.getAccessLatency(effectiveAddress);
 
             log("[ISSUE] " + op + " -> LoadBuffer " + lb.getTag() +
-                    " (tag=" + lb.getTag() + ", seq=" + seq + ", latency=" + accessLatency +
-                    (cache.isHit((int) estimatedEa) ? " HIT" : " MISS") + ")");
+                    " (tag=" + lb.getTag() + ", seq=" + seq + ", EA=" + effectiveAddress +
+                    ", latency=" + accessLatency +
+                    (cache.isHit(effectiveAddress) ? " HIT" : " MISS") + ")");
 
             lb.issue(instr, registerFile, lb.getTag(), seq, accessLatency);
 
-            // Start address calculation in address unit
-            au.startForLoad(lb, registerFile);
+            // Set effective address immediately
+            lb.setEffectiveAddress(effectiveAddress);
 
             iq.dequeue();
             programCounter++;
@@ -795,16 +805,34 @@ public class TomasuloSimulator {
         }
 
         if (instr.isStore()) {
-            StoreBuffer sb = findFreeStoreBuffer();
-            if (sb == null) {
-                log("[ISSUE] Stall: no free StoreBuffer for " + op);
+            // Check base register availability - must be ready to compute EA
+            int base = instr.getBaseReg();
+            if (registerFile.get(base).getQi() != Tag.NONE) {
+                log("[ISSUE] Stall: base register " + base + " not ready for " + op);
                 return;
             }
 
-            // Find free address unit
-            AddressUnit au = findFreeAddressUnit();
-            if (au == null) {
-                log("[ISSUE] Stall: no free AddressUnit for " + op);
+            // Compute effective address immediately
+            int offset = instr.getOffset();
+            int effectiveAddress = registerFile.get(base).getIntValue() + offset;
+
+            // Check memory ordering: stores must wait for all previous loads AND stores with same EA
+            for (LoadBuffer lb : loadBuffers) {
+                if (!lb.isFree() && lb.getEffectiveAddress() == effectiveAddress) {
+                    log("[ISSUE] Stall: store at EA=" + effectiveAddress + " waiting for load " + lb.getTag());
+                    return;
+                }
+            }
+            for (StoreBuffer existingSb : storeBuffers) {
+                if (!existingSb.isFree() && existingSb.getEffectiveAddress() == effectiveAddress) {
+                    log("[ISSUE] Stall: store at EA=" + effectiveAddress + " waiting for store " + existingSb.getTag());
+                    return;
+                }
+            }
+
+            StoreBuffer sb = findFreeStoreBuffer();
+            if (sb == null) {
+                log("[ISSUE] Stall: no free StoreBuffer for " + op);
                 return;
             }
 
@@ -813,12 +841,12 @@ public class TomasuloSimulator {
             // Note: Cache hit/miss latency will be determined when execution starts
             // (when the value to store is ready)
             log("[ISSUE] " + op + " -> StoreBuffer " + sb.getTag() +
-                    " (tag=" + sb.getTag() + ", seq=" + seq + ")");
+                    " (tag=" + sb.getTag() + ", seq=" + seq + ", EA=" + effectiveAddress + ")");
 
             sb.issue(instr, registerFile, sb.getTag(), seq);
 
-            // Start address calculation in address unit
-            au.startForStore(sb, registerFile);
+            // Set effective address immediately
+            sb.setEffectiveAddress(effectiveAddress);
 
             iq.dequeue();
             programCounter++;

@@ -119,6 +119,10 @@ public class LoadBuffer {
         }
     }
 
+    public boolean isAddressReady() {
+        return addressReady;
+    }
+
     public void setEffectiveAddress(long ea) {
         this.effectiveAddress = ea;
         this.addressReady = true;

@@ -133,6 +133,10 @@ public class StoreBuffer {
         this.remainingCycles = 0; // Will be set when execution starts
     }
 
+    public boolean isAddressReady() {
+        return addressReady;
+    }
+
     public void setEffectiveAddress(long ea) {
         this.effectiveAddress = ea;
         this.addressReady = true;
@@ -226,10 +230,10 @@ public class StoreBuffer {
         if (state != State.EXECUTING)
             return;
 
-        // First tick in EXECUTING state - mark started but don't decrement yet
+        // First tick in EXECUTING state - mark started and continue to decrement
+        // (The ISSUED cycle was the "issue" cycle, now we start counting down)
         if (!executionStarted) {
             executionStarted = true;
-            return; // Don't decrement on the first tick
         }
 
         remainingCycles--;
@@ -239,18 +243,22 @@ public class StoreBuffer {
                 case SW:
                     // Store word (32-bit integer)
                     memory.storeWord((int) effectiveAddress, (int) valueToStore);
+                    System.out.println("[STORE] " + name + " completed: wrote " + (int) valueToStore + " to address " + effectiveAddress);
                     break;
                 case SD:
                     // Store doubleword (64-bit integer)
                     memory.storeLong((int) effectiveAddress, (long) valueToStore);
+                    System.out.println("[STORE] " + name + " completed: wrote " + (long) valueToStore + " to address " + effectiveAddress);
                     break;
                 case S_S:
                     // Store single-precision float
                     memory.storeFloat((int) effectiveAddress, (float) valueToStore);
+                    System.out.println("[STORE] " + name + " completed: wrote " + (float) valueToStore + " to address " + effectiveAddress);
                     break;
                 case S_D:
                     // Store double-precision float
                     memory.storeDouble((int) effectiveAddress, valueToStore);
+                    System.out.println("[STORE] " + name + " completed: wrote " + valueToStore + " to address " + effectiveAddress);
                     break;
                 default:
                     throw new IllegalStateException("Unsupported store opcode: " + opcode);
