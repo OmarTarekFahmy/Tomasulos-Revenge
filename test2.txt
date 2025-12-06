@@ -1,0 +1,7 @@
+L.S F6, 0(R2) 
+ADD.S F7, F1, F3 
+L.S F2, 20(R2) 
+MUL.S F0, F2, F4 
+SUB.S F8, F2, F6 
+DIV.S F10, F0, F6 
+S.S F10, 0(R2)
